@@ -7,19 +7,37 @@ import soundfile as sf
 import audiomentations as am
 from scipy.signal import spectrogram
 
+import librosa as lb
+
 from sklearn.model_selection import ShuffleSplit
+from pysndfx import AudioEffectsChain
 
 
 def is_intersect(a, b, a1, b1):
     return not ((a < a1 and b < a1) or (a > b1 and b > b1))
 
 
+def preprocess_audio(audio, nperseg, sample_rate):
+    f, t, sxx = spectrogram(audio, nperseg=nperseg, fs=sample_rate)
+    freq_idx = np.max(np.argwhere(f <= 14000))
+
+    sxx = sxx[:freq_idx]
+
+    data = -np.log10(sxx + 1e-16)
+
+    data /= data.max()
+    data -= data.min()
+
+    return data
+
+
 class BirdDataset(Dataset):
     def __init__(self, df, ds_dir='/datasets/data/birds/train/', pos_rate=0.5, duration=6, nperseg=1032,
-                 disable_negative=False):
+                 disable_negative=False, is_val=False):
         self.df = df
         self.path = ds_dir
         self.transforms = am.Compose([
+            am.AddGaussianSNR(),
         ])
         self.num_classes = 24
         self.sample_rate = 48000
@@ -29,6 +47,7 @@ class BirdDataset(Dataset):
         self.nperseg = nperseg
         self.ids = self.df['recording_id'].unique()
         self.idxs = {i: [] for i in self.ids}
+        self.is_val = is_val
 
         for i, (_, item) in enumerate(self.df.iterrows()):
             self.idxs[item['recording_id']].append(i)
@@ -74,16 +93,9 @@ class BirdDataset(Dataset):
                                      stop=end,
                                      dtype='float32')
 
-        audio = self.transforms(samples=audio, sample_rate=sample_rate)
-        f, t, sxx = spectrogram(audio, nperseg=self.nperseg, fs=self.sample_rate)  # 728 - to fit 256 dim
-        freq_idx = np.max(np.argwhere(f <= 14000))
-
-        sxx = sxx[:freq_idx]
-
-        data = -np.log10(sxx + 1e-16)
-
-        data /= data.max()
-        data -= data.min()
+        if not self.is_val:
+            audio = self.transforms(samples=audio, sample_rate=sample_rate)
+        data = preprocess_audio(audio, self.nperseg, self.sample_rate)
 
         item = {
             'x': data[None, :],
@@ -115,7 +127,7 @@ def get_datasets(test_size=0.2):
     train_df = df[df['recording_id'].isin(train_ids)]
     test_df = df[df['recording_id'].isin(test_ids)]
 
-    return BirdDataset(train_df, pos_rate=0.75, disable_negative=False), BirdDataset(test_df, pos_rate=1.0)
+    return BirdDataset(train_df, pos_rate=0.75, disable_negative=False), BirdDataset(test_df, pos_rate=1.0, is_val=True)
 
 
 
