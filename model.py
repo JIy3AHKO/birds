@@ -3,12 +3,25 @@ import torch
 from torchvision.models import resnet34, resnet18, resnet50
 
 
+models = {
+    'resnet50': (resnet50, 2048),
+    'resnet34': (resnet34, 512),
+    'resnet18': (resnet18, 512),
+}
+
+pools = {
+    'max': nn.AdaptiveMaxPool2d,
+    'avg': nn.AdaptiveAvgPool2d,
+}
+
+
 class Resnet(nn.Module):
 
-    def __init__(self, num_classes=24):
+    def __init__(self, num_classes=24, model_type='resnet50', pool='avg'):
         super().__init__()
-
-        d = resnet50(pretrained=True)
+        self.adapt_pool = pools[pool]
+        d, self.filters = models[model_type]
+        d = d(pretrained=True)
         self.conv1 = d.conv1
         self.bn1 = d.bn1
         self.relu = d.relu
@@ -21,7 +34,7 @@ class Resnet(nn.Module):
 
         self.regressor = nn.Sequential(
             nn.Dropout(0.1),
-            nn.Linear(2048, 128),
+            nn.Linear(self.filters, 128),
             nn.BatchNorm1d(128),
             nn.PReLU(),
             nn.Linear(128, num_classes),
@@ -40,7 +53,7 @@ class Resnet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        features = nn.AdaptiveAvgPool2d(1)(x).view(-1, 2048)
+        features = self.adapt_pool(1)(x).view(-1, self.filters)
         features = features.view(x.size(0), -1)
 
         res = self.regressor(features)

@@ -71,9 +71,9 @@ if __name__ == '__main__':
             y_true['y'],
             reduction='none')
 
-        pt = torch.exp(-bce)
-        F_loss = 1.0 * (1 - pt) ** 2 * bce
-        F_loss = F_loss.mean()
+        # pt = torch.exp(-bce)
+        # F_loss = 1.0 * (1 - pt) ** 2 * bce
+        # F_loss = F_loss.mean()
 
         return bce.mean(), {'bce': bce.mean()}
 
@@ -84,7 +84,7 @@ if __name__ == '__main__':
 
         return lrap, {'bce': bce, 'lrap': lrap}
 
-    trainer = Trainer(50,
+    trainer = Trainer(100,
                       model,
                       bce_loss,
                       val_loss=val_loss,
