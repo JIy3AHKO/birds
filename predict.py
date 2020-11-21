@@ -29,7 +29,8 @@ class InferenceDataset(Dataset):
         batch = []
 
         for start in np.arange(0, 60, duration):
-            a = audio[start * sample_rate:(start + duration) * sample_rate]
+            start = np.clip(start, 0, 60 - duration)
+            a = audio[int(start * sample_rate):int((start + duration) * sample_rate)]
             data = preprocess_audio(a, nperseg, sample_rate)
             batch.append(data[None, None, :])
 
@@ -39,6 +40,7 @@ class InferenceDataset(Dataset):
 
     def __len__(self):
         return len(self.ids)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -18,16 +18,12 @@ def is_intersect(a, b, a1, b1):
 
 
 def preprocess_audio(audio, nperseg, sample_rate):
-    f, t, sxx = spectrogram(audio, nperseg=nperseg, fs=sample_rate)
-    freq_idx = np.max(np.argwhere(f <= 14000))
+    sxx = lb.feature.melspectrogram(audio, sr=sample_rate, n_mels=128, hop_length=1024)
+    # freq_idx = np.max(np.argwhere(f <= 14000))
+    #
+    # sxx = sxx[:freq_idx]
 
-    sxx = sxx[:freq_idx]
-
-    data = -np.log10(sxx + 1e-16)
-
-    data /= data.max()
-    data -= data.min()
-
+    data = np.log10(sxx + 1e-16)
     return data
 
 
