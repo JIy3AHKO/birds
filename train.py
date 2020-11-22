@@ -1,9 +1,14 @@
+import os
+
+os.environ['MKL_NUM_THREADS'] = "1"
+os.environ['OPENBLAS_NUM_THREADS'] = "1"
+
 import argparse
 from torch.utils.data import DataLoader
 import torch.nn.functional as f
 import torch
 import numpy as np
-import os
+
 
 from dataset import get_datasets
 from trainer import Trainer

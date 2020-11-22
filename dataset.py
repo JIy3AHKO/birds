@@ -5,12 +5,34 @@ import numpy as np
 from torch.utils.data import Dataset
 import soundfile as sf
 import audiomentations as am
+from audiomentations.core.transforms_interface import BaseWaveformTransform
 from scipy.signal import spectrogram
 
 import librosa as lb
 
 from sklearn.model_selection import ShuffleSplit
 from pysndfx import AudioEffectsChain
+
+
+class SndTransform(BaseWaveformTransform):
+    def __init__(self, transform, p=0.5, **kwargs):
+        super().__init__(p)
+        self.args = kwargs
+        self.func = transform
+
+    def randomize_parameters(self, samples, sample_rate):
+        super().randomize_parameters(samples, sample_rate)
+        if self.parameters["should_apply"]:
+            for k, rng in self.args:
+                self.parameters[f'transform_parameter_{k}'] = np.random.uniform(*rng)
+
+    def apply(self, samples, sample_rate):
+        f = self.func(**{k.replace('transform_parameter_', ''): v
+                         for k, v
+                         in self.parameters.items()
+                         if 'transform_parameter_' in k})
+
+        return f(samples)
 
 
 def is_intersect(a, b, a1, b1):
@@ -34,7 +56,9 @@ class BirdDataset(Dataset):
         self.path = ds_dir
         self.transforms = am.Compose([
             am.AddGaussianSNR(),
+         #   am.Normalize(p=1.0)
         ])
+
         self.num_classes = 24
         self.sample_rate = 48000
         self.duration = duration
@@ -60,8 +84,8 @@ class BirdDataset(Dataset):
 
     def __getitem__(self, idx):
         idxs = self.idxs[self.ids[idx]]
-
         samples = self.df.iloc[idxs]
+
         audio_path = os.path.join(self.path, f'{samples.iloc[0].recording_id}.flac')
 
         if np.random.rand() < self.pos_rate:
@@ -83,13 +107,13 @@ class BirdDataset(Dataset):
 
         start = int(start * self.sample_rate)
         end = int(end * self.sample_rate)
-
         audio, sample_rate = sf.read(audio_path,
                                      start=start,
                                      stop=end,
                                      dtype='float32')
 
         if not self.is_val:
+
             audio = self.transforms(samples=audio, sample_rate=sample_rate)
         data = preprocess_audio(audio, self.nperseg, self.sample_rate)
 

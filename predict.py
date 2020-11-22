@@ -1,6 +1,9 @@
 import argparse
 import os
 
+os.environ['MKL_NUM_THREADS'] = "1"
+os.environ['OPENBLAS_NUM_THREADS'] = "1"
+
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
@@ -11,7 +14,6 @@ import tqdm
 from dataset import preprocess_audio
 from model import Resnet
 import soundfile as sf
-
 
 duration = 6
 nperseg = 1032
