@@ -10,7 +10,7 @@ from scipy.signal import spectrogram
 
 import librosa as lb
 
-from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import KFold
 from pysndfx import AudioEffectsChain
 
 
@@ -128,7 +128,7 @@ class BirdDataset(Dataset):
         return len(self.ids)
 
 
-def get_datasets(test_size=0.2):
+def get_datasets(seed=1337228, fold=0, n_folds=5):
     csv_pos = pd.read_csv('/datasets/data/birds/train_tp_prep.csv')
     csv_neg = pd.read_csv('/datasets/data/birds/train_fp_prep.csv')
 
@@ -139,10 +139,13 @@ def get_datasets(test_size=0.2):
 
     ids = df['recording_id'].unique()
 
-    np.random.shuffle(ids)
-    split = int(test_size * len(ids))
+    kf = KFold(n_folds, shuffle=True, random_state=seed)
 
-    train_ids, test_ids = ids[:-split], ids[-split:]
+    fold_gen = kf.split(ids)
+
+    train_idx, val_idx = list(fold_gen)[fold]
+
+    train_ids, test_ids = ids[train_idx], ids[val_idx]
 
     train_df = df[df['recording_id'].isin(train_ids)]
     test_df = df[df['recording_id'].isin(test_ids)]

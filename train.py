@@ -9,10 +9,10 @@ import torch.nn.functional as f
 import torch
 import numpy as np
 
-
+from opt import AdaBelief, TrapezoidScheduler
 from dataset import get_datasets
 from trainer import Trainer
-from model import Resnet
+from model import Resnet, Effnet
 from sklearn.metrics import label_ranking_average_precision_score
 
 
@@ -43,17 +43,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--name', '-n', type=str, default='default')
+    parser.add_argument('--fold', '-f', type=int, default=0)
 
     args = parser.parse_args()
-    experiment_name = f'{args.name}'
+    experiment_name = f'{args.name}_{args.fold}'
 
     os.mkdir(f'experiments/{experiment_name}/')
 
     train_size = 1000
-    val_split = 0.2
-    batch_size = 32
+    batch_size = 16
 
-    train_ds, val_ds = get_datasets(val_split)
+    train_ds, val_ds = get_datasets(fold=args.fold)
     train_loader = DataLoader(train_ds,
                               batch_size=batch_size,
                               shuffle=True,
@@ -89,7 +89,7 @@ if __name__ == '__main__':
 
         return lrap, {'bce': bce, 'lrap': lrap}
 
-    trainer = Trainer(100,
+    trainer = Trainer(n_epochs,
                       model,
                       bce_loss,
                       val_loss=val_loss,
@@ -98,8 +98,10 @@ if __name__ == '__main__':
                       img_fn=vis_fn,
                       fn_type='image')
 
-    opt = torch.optim.Adam(trainer.model.parameters(), lr=1e-3)
+
+    opt = AdaBelief(trainer.model.parameters(), lr=1e-3)
     sch = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, patience=3, verbose=True, factor=0.66)
+    #sch = TrapezoidScheduler(opt, 50).scheduler
 
     trainer.fit(train_loader, val_loader, opt, sch)
     torch.save(trainer.model, f'models/last_{args.name}.pth')

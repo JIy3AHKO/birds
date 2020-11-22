@@ -1,6 +1,7 @@
 from torch import nn
 import torch
 from torchvision.models import resnet34, resnet18, resnet50
+from efficientnet_pytorch import EfficientNet
 
 
 models = {
@@ -33,7 +34,7 @@ class Resnet(nn.Module):
         self.layer4 = d.layer4
 
         self.regressor = nn.Sequential(
-            nn.Dropout(0.1),
+            nn.Dropout(0.4),
             nn.Linear(self.filters, 128),
             nn.BatchNorm1d(128),
             nn.PReLU(),
@@ -52,6 +53,33 @@ class Resnet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
+
+        features = self.adapt_pool(1)(x).view(-1, self.filters)
+        features = features.view(x.size(0), -1)
+
+        res = self.regressor(features)
+
+        return {'y': res}
+
+
+class Effnet(nn.Module):
+    def __init__(self, num_classes=24, model_type="efficientnet-b0", pool='avg'):
+        super().__init__()
+        self.effnet = EfficientNet.from_pretrained(model_type, advprop=True)
+        self.adapt_pool = pools[pool]
+        self.filters = 1280
+        self.regressor = nn.Sequential(
+            nn.Dropout(0.4),
+            nn.Linear(self.filters, 128),
+            nn.BatchNorm1d(128),
+            nn.PReLU(),
+            nn.Linear(128, num_classes),
+        )
+
+    def forward(self, x):
+        x = x['x']
+        x = torch.cat([x, x, x], dim=1)
+        x = self.effnet.extract_features(x)
 
         features = self.adapt_pool(1)(x).view(-1, self.filters)
         features = features.view(x.size(0), -1)
