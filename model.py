@@ -18,7 +18,7 @@ pools = {
 
 class Resnet(nn.Module):
 
-    def __init__(self, num_classes=24, model_type='resnet50', pool='avg'):
+    def __init__(self, num_classes=24, model_type='resnet50', pool='avg', dropout=0.4):
         super().__init__()
         self.adapt_pool = pools[pool]
         d, self.filters = models[model_type]
@@ -34,11 +34,9 @@ class Resnet(nn.Module):
         self.layer4 = d.layer4
 
         self.regressor = nn.Sequential(
-            nn.Dropout(0.4),
-            nn.Linear(self.filters, 128),
-            nn.BatchNorm1d(128),
             nn.PReLU(),
-            nn.Linear(128, num_classes),
+            nn.Dropout(dropout),
+            nn.Linear(self.filters, num_classes),
         )
 
     def forward(self, input):

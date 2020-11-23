@@ -44,9 +44,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--name', '-n', type=str, default='default')
     parser.add_argument('--fold', '-f', type=int, default=0)
+    parser.add_argument('--wd', type=float, default=1e-4)
+    parser.add_argument('--model', type=str, default="resnet34")
+    parser.add_argument('--dropout', type=float, default=0.4)
 
     args = parser.parse_args()
-    experiment_name = f'{args.name}_{args.fold}'
+    experiment_name = f'{args.name}_fold{args.fold}_wd{args.wd}_{args.model}_dropout{args.dropout}'
 
     os.mkdir(f'experiments/{experiment_name}/')
 
@@ -66,9 +69,9 @@ if __name__ == '__main__':
                             pin_memory=True,
                             num_workers=12)
 
-    n_epochs = 100
+    n_epochs = 40
 
-    model = Resnet().cuda()
+    model = Resnet(model_type=args.model, dropout=args.dropout).cuda()
 
     def bce_loss(y_pred, y_true):
         bce = torch.nn.functional.binary_cross_entropy_with_logits(
@@ -93,13 +96,12 @@ if __name__ == '__main__':
                       model,
                       bce_loss,
                       val_loss=val_loss,
-                      name=args.name,
+                      name=experiment_name,
                       save_fn=lambda x: torch.save(x, f'experiments/{experiment_name}/model.pth'),
                       img_fn=vis_fn,
                       fn_type='image')
 
-
-    opt = AdaBelief(trainer.model.parameters(), lr=1e-3)
+    opt = AdaBelief(trainer.model.parameters(), lr=1e-3, weight_decay=args.wd, weight_decouple=True)
     sch = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, patience=3, verbose=True, factor=0.66)
     #sch = TrapezoidScheduler(opt, 50).scheduler
 
