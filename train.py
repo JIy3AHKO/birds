@@ -49,11 +49,12 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--bs', type=int, default=16)
-    parser.add_argument('--normalize', type=bool, default=False)
+    parser.add_argument('--normalize', type=int, default=0)
     parser.add_argument('--pos_rate', type=float, default=0.75)
 
     args = parser.parse_args()
     experiment_name = ""
+    args.normalize = bool(args.normalize)
     for k, v in vars(args).items():
         experiment_name += f"{k}-{v}_" if k != "name" else f"{v}_"
 
@@ -64,7 +65,7 @@ if __name__ == '__main__':
     train_size = 1000
     batch_size = args.bs
 
-    train_ds, val_ds = get_datasets(fold=args.fold, )
+    train_ds, val_ds = get_datasets(fold=args.fold, normalize=args.normalize, pos_rate=args.pos_rate)
     train_loader = DataLoader(train_ds,
                               batch_size=batch_size,
                               shuffle=True,
@@ -110,7 +111,7 @@ if __name__ == '__main__':
                       fn_type='image')
 
     opt = AdaBelief(trainer.model.parameters(), lr=args.lr, weight_decay=args.wd, weight_decouple=True)
-    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, patience=3, verbose=True, factor=0.66)
+    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, patience=3, verbose=True, factor=0.33)
     #sch = TrapezoidScheduler(opt, 50).scheduler
 
     trainer.fit(train_loader, val_loader, opt, sch)

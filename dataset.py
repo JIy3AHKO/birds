@@ -2,7 +2,7 @@ import os
 
 import pandas as pd
 import numpy as np
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, ConcatDataset
 import soundfile as sf
 import audiomentations as am
 from audiomentations.core.transforms_interface import BaseWaveformTransform
@@ -12,6 +12,8 @@ import librosa as lb
 from sklearn.model_selection import KFold
 from pysndfx import AudioEffectsChain
 
+from misc import is_intersect, FreeSegmentSet
+import audio
 
 class SndTransform(BaseWaveformTransform):
     def __init__(self, transform, p=0.5, **kwargs):
@@ -34,10 +36,6 @@ class SndTransform(BaseWaveformTransform):
         return f(samples)
 
 
-def is_intersect(a, b, a1, b1):
-    return not ((a < a1 and b < a1) or (a > b1 and b > b1))
-
-
 def preprocess_audio(audio, nperseg, sample_rate, normalize=False):
     if normalize:
         audio = am.Normalize(p=1.0)(samples=audio, sample_rate=sample_rate)
@@ -50,12 +48,173 @@ def preprocess_audio(audio, nperseg, sample_rate, normalize=False):
     return data
 
 
-def audio_filter(audio, mode, w, wet):
-    sos = signal.butter(10, w, mode, output='sos', fs=48000)
+def get_target(num_classes, samples, start, end):
+    target = np.zeros(num_classes, dtype='float32')
 
-    filtered = signal.sosfilt(sos, audio).astype('float32', copy=False)
+    for i, item in samples.iterrows():
+        if item['negative'] == 0 and is_intersect(start, end, item['t_min'], item['t_max']):
+            target[item['species_id']] = 1.0
 
-    return audio * (1 - wet) + filtered * wet
+    return target
+
+
+class PosDataset(Dataset):
+    def __init__(self, df, ds_dir='/datasets/data/birds/train/'):
+        self.df = df
+        self.path = ds_dir
+        self.num_classes = 24
+        self.sample_rate = 48000
+        self.ids = self.df['recording_id'].unique()
+        self.idxs = {i: [] for i in self.ids}
+        for i, (_, item) in enumerate(self.df.iterrows()):
+            self.idxs[item['recording_id']].append(i)
+
+        self.overlap = 0.5
+
+    def __getitem__(self, idx):
+        idxs = self.idxs[self.ids[idx]]
+        samples = self.df.iloc[idxs]
+
+        audio_path = os.path.join(self.path, f'{samples.iloc[0].recording_id}.flac')
+
+        pos_interval_lengths = []
+        for label_id in idxs:
+            sample = self.df.iloc[label_id]
+            pos_interval_lengths.append(sample['t_max'] - sample['t_min'])
+
+        probs = np.array(pos_interval_lengths)
+        probs /= probs.sum()
+
+        interval = np.random.choice(np.arange(len(idxs)), p=probs)
+
+        sample = self.df.iloc[idxs[interval]]
+
+        start = np.clip(sample['t_min'] - self.overlap, 0, 60)
+        end = np.clip(sample['t_max'] + self.overlap, 0, 60)
+
+        target = get_target(self.num_classes, samples, start, end)
+
+        start = int(start * self.sample_rate)
+        end = int(end * self.sample_rate)
+
+        audio, sample_rate = sf.read(audio_path,
+                                     start=start,
+                                     stop=end,
+                                     dtype='float32')
+
+        return {'a': audio, 't': target}
+
+    def __len__(self):
+        return len(self.ids)
+
+
+class NegDataset(Dataset):
+    def __init__(self, df, ds_dir='/datasets/data/birds/train/', duration=6):
+        self.df = df
+        self.path = ds_dir
+        self.num_classes = 24
+        self.sample_rate = 48000
+        self.ids = self.df['recording_id'].unique()
+        self.idxs = {i: [] for i in self.ids}
+        for i, (_, item) in enumerate(self.df.iterrows()):
+            self.idxs[item['recording_id']].append(i)
+
+        self.overlap = 0.5
+        self.duration = duration
+
+    def __getitem__(self, idx):
+        idxs = self.idxs[self.ids[idx]]
+        samples = self.df.iloc[idxs]
+
+        audio_path = os.path.join(self.path, f'{samples.iloc[0].recording_id}.flac')
+
+        segment_set = FreeSegmentSet()
+
+        for label_id in idxs:
+            sample = self.df.iloc[label_id]
+            segment_set.add_segment(sample['t_min'] - self.overlap, sample['t_max'] + self.overlap)
+
+        negative_segments = [s for s in segment_set.segments if s[1] - s[0] > self.duration]
+        probs = np.array([s[1] - s[0] for s in negative_segments])
+        probs /= probs.sum()
+
+        interval = np.random.choice(np.arange(len(negative_segments)), p=probs)
+
+        start, end = negative_segments[interval]
+
+        start = np.random.uniform(start, end - self.duration)
+        end = start + self.duration
+
+        target = get_target(self.num_classes, samples, start, end)
+
+        start = int(start * self.sample_rate)
+        end = int(end * self.sample_rate)
+
+        audio, sample_rate = sf.read(audio_path,
+                                     start=start,
+                                     stop=end,
+                                     dtype='float32')
+        if len(audio) == 0:
+            raise ValueError()
+        return {'a': audio, 't': target}
+
+    def __len__(self):
+        return len(self.ids)
+
+
+class TrainBirdDataset(Dataset):
+    def __init__(self, pos_dataset, neg_dataset,  duration=6, size=5000, normalise=False, sr=48000):
+        self.pos_ds = pos_dataset
+        self.neg_ds = neg_dataset
+        self.duration = duration
+        self.size = size
+        self.additional_pos_prob = 0.5
+        self.additional_pos_count = 3
+        self.sr = sr
+        self.min_sample_len = 2 * self.sr
+        self.sample_crop_limit = 0.5
+        self.transforms = am.Compose([
+            am.AddGaussianSNR(),
+        #    am.PitchShift(min_semitones=-1, max_semitones=1, p=0.15)
+        ])
+        self.normalise = normalise
+
+    def __getitem__(self, idx):
+        neg_id = np.random.randint(0, len(self.pos_ds))
+
+        noise = self.neg_ds[neg_id]
+
+        audio_sample = noise['a']
+        t = noise['t']
+
+        for i in range(self.additional_pos_count):
+            if np.random.rand() > self.additional_pos_prob and i > 0:
+                continue
+            pos_id = np.random.randint(0, len(self.pos_ds))
+            pos = self.pos_ds[pos_id]
+
+            pos['a'] = am.TimeStretch(leave_length_unchanged=False, p=0.15)(samples=pos['a'], sample_rate=self.sr)
+
+            if len(pos['a']) > self.duration * self.sr:
+                pos['a'] = pos['a'][:self.duration * self.sr]
+
+            position = np.random.uniform(0, (len(noise['a']) - len(pos['a'])) / self.sr)
+            alpha = np.random.uniform(0.6, 1.0)
+            fade_size = np.random.uniform(0.5, 0.15) * len(pos['a']) / self.sr
+            audio_sample = audio.insert(audio_sample, pos['a'], position, alpha=alpha, fade=fade_size)
+            t += pos['t']
+
+        audio_sample = self.transforms(samples=audio_sample, sample_rate=self.sr)
+
+        data = preprocess_audio(audio_sample, None, self.sr, normalize=self.normalise)
+        t = np.clip(t, 0, 1)
+        return {
+            'x': data[None, :],
+            'y': t
+        }
+
+    def __len__(self):
+        return self.size
 
 
 class BirdDataset(Dataset):
@@ -65,6 +224,8 @@ class BirdDataset(Dataset):
         self.path = ds_dir
         self.transforms = am.Compose([
             am.AddGaussianSNR(),
+            am.TimeStretch(p=0.15),
+        #    am.PitchShift(min_semitones=-1, max_semitones=1, p=0.15)
         ])
 
         self.num_classes = 24
@@ -108,11 +269,7 @@ class BirdDataset(Dataset):
             start = np.random.uniform(0, 60 - self.duration - self.epsilon)
             end = start + self.duration
 
-        target = np.zeros(self.num_classes, dtype='float32')
-
-        for i, item in samples.iterrows():
-            if item['negative'] == 0 and is_intersect(start, end, item['t_min'], item['t_max']):
-                target[item['species_id']] = 1.0
+        target = get_target(self.num_classes, samples, start, end)
 
         start = int(start * self.sample_rate)
         end = int(end * self.sample_rate)
@@ -168,8 +325,15 @@ def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75
     train_df = df[df['recording_id'].isin(train_ids)]
     test_df = df[df['recording_id'].isin(test_ids)]
 
-    return BirdDataset(train_df, pos_rate=pos_rate, disable_negative=False, normalize=normalize), \
-           BirdDataset(test_df, pos_rate=1.0, is_val=True, normalize=normalize)
+    pos_ds = PosDataset(csv_pos[csv_pos['recording_id'].isin(train_ids)])
+    neg_ds = NegDataset(csv_pos[csv_pos['recording_id'].isin(train_ids)])
+
+    train_datasets = ConcatDataset([
+        BirdDataset(train_df, pos_rate=pos_rate, disable_negative=False, normalize=normalize),
+        TrainBirdDataset(pos_ds, neg_ds, normalise=normalize)
+    ])
+
+    return train_datasets, BirdDataset(test_df, pos_rate=1.0, is_val=True, normalize=normalize)
 
 
 

@@ -22,6 +22,34 @@ def LWLRAP(preds, labels):
     score = scores.sum() / labels.sum()
     return score.item()
 
-# Sample usage
-y_true = torch.tensor(np.array([[1, 1, 0], [1, 0, 1], [0, 0, 1]]))
-y_score = torch.tensor(np.random.randn(3, 3))
+
+def is_intersect(a, b, a1, b1):
+    return not ((a < a1 and b < a1) or (a > b1 and b > b1))
+
+
+class FreeSegmentSet:
+    def __init__(self, start_range=(0, 60)):
+        self.segments = [start_range]
+
+    def add_segment(self, start, end):
+        new_segments = []
+
+        for s in self.segments:
+            if is_intersect(start, end, s[0], s[1]):
+                if s[0] < start < s[1]:
+                    new_segments.append((s[0], start))
+
+                    if end < s[1]:
+                        new_segments.append((end, s[1]))
+
+                elif s[0] < end < s[1]:
+                    new_segments.append((end, s[1]))
+
+                    if start > s[0]:
+                        new_segments.append((s[0], start))
+
+            else:
+                new_segments.append(s)
+
+        self.segments = new_segments
+
