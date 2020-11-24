@@ -33,7 +33,7 @@ class InferenceDataset(Dataset):
         for start in np.arange(0, 60, duration):
             start = np.clip(start, 0, 60 - duration)
             a = audio[int(start * sample_rate):int((start + duration) * sample_rate)]
-            data = preprocess_audio(a, nperseg, sample_rate)
+            data = preprocess_audio(a, nperseg, sample_rate, normalize=False)
             batch.append(data[None, None, :])
 
         batch = np.concatenate(batch, axis=0)

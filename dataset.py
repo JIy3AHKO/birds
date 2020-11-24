@@ -6,8 +6,7 @@ from torch.utils.data import Dataset
 import soundfile as sf
 import audiomentations as am
 from audiomentations.core.transforms_interface import BaseWaveformTransform
-from scipy.signal import spectrogram
-
+from scipy import signal
 import librosa as lb
 
 from sklearn.model_selection import KFold
@@ -39,7 +38,9 @@ def is_intersect(a, b, a1, b1):
     return not ((a < a1 and b < a1) or (a > b1 and b > b1))
 
 
-def preprocess_audio(audio, nperseg, sample_rate):
+def preprocess_audio(audio, nperseg, sample_rate, normalize=False):
+    if normalize:
+        audio = am.Normalize(p=1.0)(samples=audio, sample_rate=sample_rate)
     sxx = lb.feature.melspectrogram(audio, sr=sample_rate, n_mels=128, hop_length=1024)
     # freq_idx = np.max(np.argwhere(f <= 14000))
     #
@@ -49,14 +50,21 @@ def preprocess_audio(audio, nperseg, sample_rate):
     return data
 
 
+def audio_filter(audio, mode, w, wet):
+    sos = signal.butter(10, w, mode, output='sos', fs=48000)
+
+    filtered = signal.sosfilt(sos, audio).astype('float32', copy=False)
+
+    return audio * (1 - wet) + filtered * wet
+
+
 class BirdDataset(Dataset):
     def __init__(self, df, ds_dir='/datasets/data/birds/train/', pos_rate=0.5, duration=6, nperseg=1032,
-                 disable_negative=False, is_val=False):
+                 disable_negative=False, is_val=False, normalize=False):
         self.df = df
         self.path = ds_dir
         self.transforms = am.Compose([
             am.AddGaussianSNR(),
-         #   am.Normalize(p=1.0)
         ])
 
         self.num_classes = 24
@@ -68,6 +76,7 @@ class BirdDataset(Dataset):
         self.ids = self.df['recording_id'].unique()
         self.idxs = {i: [] for i in self.ids}
         self.is_val = is_val
+        self.normalize = normalize
 
         for i, (_, item) in enumerate(self.df.iterrows()):
             self.idxs[item['recording_id']].append(i)
@@ -113,9 +122,18 @@ class BirdDataset(Dataset):
                                      dtype='float32')
 
         if not self.is_val:
+            # if np.random.rand() < 0.3:
+            #     lfreq = np.random.uniform(90, samples.iloc[0]['f_min'])
+            #     wet = np.random.uniform(0.5, 1.0)
+            #     audio = audio_filter(audio, 'highpass', lfreq, wet)
+            #
+            # if np.random.rand() < 0.3:
+            #     hfreq = np.random.uniform(samples.iloc[0]['f_max'], 20000)
+            #     wet = np.random.uniform(0.5, 1.0)
+            #     audio = audio_filter(audio, 'lowpass', hfreq, wet)
 
             audio = self.transforms(samples=audio, sample_rate=sample_rate)
-        data = preprocess_audio(audio, self.nperseg, self.sample_rate)
+        data = preprocess_audio(audio, self.nperseg, self.sample_rate, normalize=self.normalize)
 
         item = {
             'x': data[None, :],
@@ -128,7 +146,7 @@ class BirdDataset(Dataset):
         return len(self.ids)
 
 
-def get_datasets(seed=1337228, fold=0, n_folds=5):
+def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75):
     csv_pos = pd.read_csv('/datasets/data/birds/train_tp_prep.csv')
     csv_neg = pd.read_csv('/datasets/data/birds/train_fp_prep.csv')
 
@@ -150,7 +168,8 @@ def get_datasets(seed=1337228, fold=0, n_folds=5):
     train_df = df[df['recording_id'].isin(train_ids)]
     test_df = df[df['recording_id'].isin(test_ids)]
 
-    return BirdDataset(train_df, pos_rate=0.75, disable_negative=False), BirdDataset(test_df, pos_rate=1.0, is_val=True)
+    return BirdDataset(train_df, pos_rate=pos_rate, disable_negative=False, normalize=normalize), \
+           BirdDataset(test_df, pos_rate=1.0, is_val=True, normalize=normalize)
 
 
 

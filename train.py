@@ -23,7 +23,6 @@ def vis_fn(batch, pred):
     imgs = imgs * 255
     imgs = imgs.astype('uint8')
     #imgs = imgs.transpose(0, 2, 3, 1)
-    print(imgs.shape)
 
     text = 'GT: '
     for x in batch['y'][:4]:
@@ -44,30 +43,39 @@ if __name__ == '__main__':
 
     parser.add_argument('--name', '-n', type=str, default='default')
     parser.add_argument('--fold', '-f', type=int, default=0)
-    parser.add_argument('--wd', type=float, default=1e-4)
+    parser.add_argument('--wd', type=float, default=1e-2)
     parser.add_argument('--model', type=str, default="resnet34")
-    parser.add_argument('--dropout', type=float, default=0.4)
+    parser.add_argument('--dropout', type=float, default=0.45)
+    parser.add_argument('--debug', action="store_true")
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--bs', type=int, default=16)
+    parser.add_argument('--normalize', type=bool, default=False)
+    parser.add_argument('--pos_rate', type=float, default=0.75)
 
     args = parser.parse_args()
-    experiment_name = f'{args.name}_fold{args.fold}_wd{args.wd}_{args.model}_dropout{args.dropout}'
+    experiment_name = ""
+    for k, v in vars(args).items():
+        experiment_name += f"{k}-{v}_" if k != "name" else f"{v}_"
 
+    if args.debug and os.path.exists(f'experiments/{experiment_name}/'):
+        os.removedirs(f'experiments/{experiment_name}/')
     os.mkdir(f'experiments/{experiment_name}/')
 
     train_size = 1000
-    batch_size = 16
+    batch_size = args.bs
 
-    train_ds, val_ds = get_datasets(fold=args.fold)
+    train_ds, val_ds = get_datasets(fold=args.fold, )
     train_loader = DataLoader(train_ds,
                               batch_size=batch_size,
                               shuffle=True,
                               drop_last=True,
                               pin_memory=True,
-                              num_workers=12)
+                              num_workers=12 if not args.debug else 0)
     val_loader = DataLoader(val_ds,
                             batch_size=batch_size,
                             drop_last=True,
                             pin_memory=True,
-                            num_workers=12)
+                            num_workers=12 if not args.debug else 0)
 
     n_epochs = 40
 
@@ -101,7 +109,7 @@ if __name__ == '__main__':
                       img_fn=vis_fn,
                       fn_type='image')
 
-    opt = AdaBelief(trainer.model.parameters(), lr=1e-3, weight_decay=args.wd, weight_decouple=True)
+    opt = AdaBelief(trainer.model.parameters(), lr=args.lr, weight_decay=args.wd, weight_decouple=True)
     sch = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, patience=3, verbose=True, factor=0.66)
     #sch = TrapezoidScheduler(opt, 50).scheduler
 
