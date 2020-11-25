@@ -15,6 +15,7 @@ from pysndfx import AudioEffectsChain
 from misc import is_intersect, FreeSegmentSet
 import audio
 
+
 class SndTransform(BaseWaveformTransform):
     def __init__(self, transform, p=0.5, **kwargs):
         super().__init__(p)
@@ -97,12 +98,12 @@ class PosDataset(Dataset):
         start = int(start * self.sample_rate)
         end = int(end * self.sample_rate)
 
-        audio, sample_rate = sf.read(audio_path,
-                                     start=start,
-                                     stop=end,
-                                     dtype='float32')
+        audio_sample, sample_rate = sf.read(audio_path,
+                                            start=start,
+                                            stop=end,
+                                            dtype='float32')
 
-        return {'a': audio, 't': target}
+        return {'a': audio_sample, 't': target, 'f_min': sample['f_min'], 'f_max': sample['f_max']}
 
     def __len__(self):
         return len(self.ids)
@@ -163,7 +164,7 @@ class NegDataset(Dataset):
 
 
 class TrainBirdDataset(Dataset):
-    def __init__(self, pos_dataset, neg_dataset,  duration=6.0, size=5000, normalise=False, sr=48000):
+    def __init__(self, pos_dataset, neg_dataset, duration=6.0, size=5000, normalise=False, sr=48000):
         self.pos_ds = pos_dataset
         self.neg_ds = neg_dataset
         self.duration = duration
@@ -173,10 +174,11 @@ class TrainBirdDataset(Dataset):
         self.sr = sr
         self.min_sample_len = 2 * self.sr
         self.sample_crop_limit = 0.5
+        self.num_classes = 24
         self.transforms = am.Compose([
             am.AddGaussianSNR(),
             # am.PitchShift(min_semitones=-1, max_semitones=1, p=0.15),
-            # am.TimeStretch(p=0.15),
+            am.TimeStretch(p=0.15),
             # am.TimeMask(p=0.2, max_band_part=0.33)
 
         ])
@@ -185,10 +187,16 @@ class TrainBirdDataset(Dataset):
     def __getitem__(self, idx):
         neg_id = np.random.randint(0, len(self.pos_ds))
 
-        noise = self.neg_ds[neg_id]
+        if np.random.rand() < 0.5:
+            noise = self.neg_ds[neg_id]
 
-        audio_sample = noise['a']
-        t = noise['t']
+            audio_sample = noise['a']
+            audio_sample = am.Normalize(p=1.0)(samples=audio_sample, sample_rate=self.sr)
+
+            t = noise['t']
+        else:
+            audio_sample = np.zeros(int(self.sr * self.duration), dtype='float32')
+            t = np.zeros(self.num_classes, dtype='float32')
 
         for i in range(self.additional_pos_count):
             if np.random.rand() > self.additional_pos_prob and i > 0:
@@ -198,13 +206,22 @@ class TrainBirdDataset(Dataset):
 
             pos['a'] = am.TimeStretch(leave_length_unchanged=False, p=0.15)(samples=pos['a'], sample_rate=self.sr)
 
-            if len(pos['a']) > self.duration * self.sr:
-                pos['a'] = pos['a'][:self.duration * self.sr]
+            pos['a'] = audio.audio_filter(pos['a'],
+                                          mode='bandpass',
+                                          w=[pos['f_min'],
+                                             pos['f_max']],
+                                          wet=np.random.uniform(0.75, 1.0))
 
-            position = np.random.uniform(0, (len(noise['a']) - len(pos['a'])) / self.sr)
+            if len(pos['a']) > int(self.duration * self.sr):
+                pos['a'] = pos['a'][:int(self.duration * self.sr)]
+
+            position = np.random.uniform(0, (len(audio_sample) - len(pos['a'])) / self.sr)
             alpha = np.random.uniform(0.6, 1.0)
             fade_size = np.random.uniform(0.5, 0.15) * len(pos['a']) / self.sr
-            audio_sample = audio.insert(audio_sample, pos['a'], position, alpha=alpha, fade=fade_size)
+
+            positive_sample = am.Normalize(p=1.0)(samples=pos['a'], sample_rate=self.sr)
+
+            audio_sample = audio.insert(audio_sample, positive_sample, position, alpha=alpha, fade=fade_size)
             t += pos['t']
 
         audio_sample = self.transforms(samples=audio_sample, sample_rate=self.sr)
@@ -227,7 +244,7 @@ class BirdDataset(Dataset):
         self.path = ds_dir
         self.transforms = am.Compose([
             am.AddGaussianSNR(),
-            # am.TimeStretch(p=0.15),
+            am.TimeStretch(p=0.15),
             # am.PitchShift(min_semitones=-1, max_semitones=1, p=0.15),
             # am.TimeMask(p=0.2, max_band_part=0.33)
         ])
@@ -277,24 +294,24 @@ class BirdDataset(Dataset):
 
         start = int(start * self.sample_rate)
         end = int(end * self.sample_rate)
-        audio, sample_rate = sf.read(audio_path,
+        audio_sample, sample_rate = sf.read(audio_path,
                                      start=start,
                                      stop=end,
                                      dtype='float32')
 
         if not self.is_val:
-            # if np.random.rand() < 0.3:
+            # if np.random.rand() < 0.1:
             #     lfreq = np.random.uniform(90, samples.iloc[0]['f_min'])
             #     wet = np.random.uniform(0.5, 1.0)
-            #     audio = audio_filter(audio, 'highpass', lfreq, wet)
+            #     audio_sample = audio.audio_filter(audio_sample, 'highpass', lfreq, wet)
             #
-            # if np.random.rand() < 0.3:
+            # if np.random.rand() < 0.1:
             #     hfreq = np.random.uniform(samples.iloc[0]['f_max'], 20000)
             #     wet = np.random.uniform(0.5, 1.0)
-            #     audio = audio_filter(audio, 'lowpass', hfreq, wet)
+            #     audio_sample = audio.audio_filter(audio_sample, 'lowpass', hfreq, wet)
 
-            audio = self.transforms(samples=audio, sample_rate=sample_rate)
-        data = preprocess_audio(audio, self.nperseg, self.sample_rate, normalize=self.normalize)
+            audio_sample = self.transforms(samples=audio_sample, sample_rate=sample_rate)
+        data = preprocess_audio(audio_sample, self.nperseg, self.sample_rate, normalize=self.normalize)
 
         item = {
             'x': data[None, :],
@@ -338,6 +355,3 @@ def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75
     ])
 
     return train_datasets, BirdDataset(test_df, pos_rate=1.0, is_val=True, normalize=normalize, duration=duration)
-
-
-

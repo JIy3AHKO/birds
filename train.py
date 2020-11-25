@@ -20,7 +20,7 @@ def vis_fn(batch, pred):
 
     imgs = batch['x'][:8].detach().cpu().numpy()
 
-    imgs = imgs * 255
+    imgs = (imgs - imgs.min()) / (imgs.max() - imgs.min()) * 255
     imgs = imgs.astype('uint8')
     #imgs = imgs.transpose(0, 2, 3, 1)
 

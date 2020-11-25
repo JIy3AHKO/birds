@@ -94,3 +94,21 @@ class FreeSegmentSet:
 
         self.segments = new_segments
 
+
+def saliency(sample, model):
+
+    model.eval()
+
+    sample['x'].requires_grad_()
+
+    scores = model(sample)['y']
+
+    # Get the index corresponding to the maximum score and the maximum score itself.
+    score_max_index = scores.argmax()
+    score_max = scores[0, score_max_index]
+
+    score_max.backward()
+
+    saliency, _ = torch.max(sample['x'].grad.data.abs(), dim=1)
+
+    return saliency[0]
