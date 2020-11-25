@@ -24,7 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--bs', type=int, default=16)
-    parser.add_argument('--normalize', type=int, default=0)
+    parser.add_argument('--normalize', type=int, default=1)
     parser.add_argument('--pos_rate', type=float, default=0.75)
 
     args = parser.parse_args()
