@@ -11,7 +11,7 @@ import numpy as np
 from scipy.signal import spectrogram
 import tqdm
 
-from dataset import preprocess_audio
+from dataset import preprocess_audio, get_target
 from model import Resnet
 import soundfile as sf
 
@@ -22,23 +22,38 @@ sample_rate = 48000
 
 class InferenceDataset(Dataset):
     def __init__(self, sub, dir):
-        self.ids = sub['recording_id'].values
         self.dir = dir
+        self.df = sub
+        self.ids = self.df['recording_id'].unique()
+        self.idxs = {i: [] for i in self.ids}
+        for i, (_, item) in enumerate(self.df.iterrows()):
+            self.idxs[item['recording_id']].append(i)
 
-    def __getitem__(self, item):
-        audio, sample_rate = sf.read(os.path.join(self.dir, f"{self.ids[item]}.flac"), dtype='float32')
+        self.num_classes = 24
+
+    def __getitem__(self, idx):
+        idxs = self.idxs[self.ids[idx]]
+        samples = self.df.iloc[idxs]
+
+        audio, sample_rate = sf.read(os.path.join(self.dir, f"{samples.iloc[0]['recording_id']}.flac"), dtype='float32')
+        item = {}
+        if 'species_id' in samples.iloc[0]:
+            item['target'] = get_target(self.num_classes, samples, 0, 60)
 
         batch = []
 
         for start in np.arange(0, 60, duration):
             start = np.clip(start, 0, 60 - duration)
             a = audio[int(start * sample_rate):int((start + duration) * sample_rate)]
-            data = preprocess_audio(a, nperseg, sample_rate, normalize=False)
+            data = preprocess_audio(a, nperseg, sample_rate, normalize=True)
             batch.append(data[None, None, :])
 
         batch = np.concatenate(batch, axis=0)
 
-        return {'batch': batch, 'recording_id': self.ids[item]}
+        item['batch'] = batch
+        item['recording_id'] = samples.iloc[0]['recording_id']
+
+        return item
 
     def __len__(self):
         return len(self.ids)
