@@ -109,7 +109,7 @@ class PosDataset(Dataset):
 
 
 class NegDataset(Dataset):
-    def __init__(self, df, ds_dir='/datasets/data/birds/train/', duration=6):
+    def __init__(self, df, ds_dir='/datasets/data/birds/train/', duration=6.0):
         self.df = df
         self.path = ds_dir
         self.num_classes = 24
@@ -163,7 +163,7 @@ class NegDataset(Dataset):
 
 
 class TrainBirdDataset(Dataset):
-    def __init__(self, pos_dataset, neg_dataset,  duration=6, size=5000, normalise=False, sr=48000):
+    def __init__(self, pos_dataset, neg_dataset,  duration=6.0, size=5000, normalise=False, sr=48000):
         self.pos_ds = pos_dataset
         self.neg_ds = neg_dataset
         self.duration = duration
@@ -221,7 +221,7 @@ class TrainBirdDataset(Dataset):
 
 
 class BirdDataset(Dataset):
-    def __init__(self, df, ds_dir='/datasets/data/birds/train/', pos_rate=0.5, duration=6, nperseg=1032,
+    def __init__(self, df, ds_dir='/datasets/data/birds/train/', pos_rate=0.5, duration=6.0, nperseg=1032,
                  disable_negative=False, is_val=False, normalize=False):
         self.df = df
         self.path = ds_dir
@@ -307,7 +307,7 @@ class BirdDataset(Dataset):
         return len(self.ids)
 
 
-def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75):
+def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75, duration=6.0):
     csv_pos = pd.read_csv('/datasets/data/birds/train_tp_prep.csv')
     csv_neg = pd.read_csv('/datasets/data/birds/train_fp_prep.csv')
 
@@ -330,14 +330,14 @@ def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75
     test_df = df[df['recording_id'].isin(test_ids)]
 
     pos_ds = PosDataset(csv_pos[csv_pos['recording_id'].isin(train_ids)])
-    neg_ds = NegDataset(csv_pos[csv_pos['recording_id'].isin(train_ids)])
+    neg_ds = NegDataset(csv_pos[csv_pos['recording_id'].isin(train_ids)], duration=duration)
 
     train_datasets = ConcatDataset([
-        BirdDataset(train_df, pos_rate=pos_rate, disable_negative=False, normalize=normalize),
-        TrainBirdDataset(pos_ds, neg_ds, normalise=normalize)
+        BirdDataset(train_df, pos_rate=pos_rate, disable_negative=False, normalize=normalize, duration=duration),
+        TrainBirdDataset(pos_ds, neg_ds, normalise=normalize, duration=duration)
     ])
 
-    return train_datasets, BirdDataset(test_df, pos_rate=1.0, is_val=True, normalize=normalize)
+    return train_datasets, BirdDataset(test_df, pos_rate=1.0, is_val=True, normalize=normalize, duration=duration)
 
 
 

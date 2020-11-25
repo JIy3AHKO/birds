@@ -26,6 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('--bs', type=int, default=16)
     parser.add_argument('--normalize', type=int, default=1)
     parser.add_argument('--pos_rate', type=float, default=0.75)
+    parser.add_argument('--duration', type=float, default=6.0)
 
     args = parser.parse_args()
     args.normalize = bool(args.normalize)
@@ -34,7 +35,7 @@ if __name__ == '__main__':
     model.cuda()
     model.eval()
 
-    _, val_ds = get_datasets(fold=args.fold, normalize=args.normalize, pos_rate=args.pos_rate)
+    _, val_ds = get_datasets(fold=args.fold, normalize=args.normalize, pos_rate=args.pos_rate, duration=args.duration)
 
     ds = InferenceDataset(val_ds.df[val_ds.df['negative'] == 0], '/datasets/data/birds/train/')
     dl = DataLoader(ds, collate_fn=lambda x: x, shuffle=False, batch_size=1, num_workers=12)
