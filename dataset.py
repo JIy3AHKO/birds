@@ -175,7 +175,7 @@ class TrainBirdDataset(Dataset):
         self.transforms = am.Compose([
             am.AddGaussianSNR(),
             # am.PitchShift(min_semitones=-1, max_semitones=1, p=0.15),
-            am.TimeStretch(p=0.15),
+            # am.TimeStretch(p=0.15),
             # am.TimeMask(p=0.2, max_band_part=0.33)
 
         ])
@@ -201,7 +201,7 @@ class TrainBirdDataset(Dataset):
             pos_id = np.random.randint(0, len(self.pos_ds))
             pos = self.pos_ds[pos_id]
 
-            pos['a'] = am.TimeStretch(leave_length_unchanged=False, p=0.15)(samples=pos['a'], sample_rate=self.sr)
+            # pos['a'] = am.TimeStretch(leave_length_unchanged=False, p=0.15)(samples=pos['a'], sample_rate=self.sr)
 
             # pos['a'] = audio.audio_filter(pos['a'],
             #                               mode='bandpass',
@@ -241,7 +241,8 @@ class BirdDataset(Dataset):
         self.path = ds_dir
         self.transforms = am.Compose([
             am.AddGaussianSNR(),
-            am.TimeStretch(p=0.15),
+            am.AddGaussianNoise()
+            # am.TimeStretch(p=0.15),
             # am.PitchShift(min_semitones=-1, max_semitones=1, p=0.15),
             # am.TimeMask(p=0.2, max_band_part=0.33)
         ])
