@@ -15,13 +15,11 @@ from dataset import preprocess_audio, get_target
 from model import Resnet
 import soundfile as sf
 
-duration = 3
-nperseg = 1032
 sample_rate = 48000
 
 
 class InferenceDataset(Dataset):
-    def __init__(self, sub, dir):
+    def __init__(self, sub, dir, duration, normalize):
         self.dir = dir
         self.df = sub
         self.ids = self.df['recording_id'].unique()
@@ -30,6 +28,8 @@ class InferenceDataset(Dataset):
             self.idxs[item['recording_id']].append(i)
 
         self.num_classes = 24
+        self.duration = duration
+        self.normalize = normalize
 
     def __getitem__(self, idx):
         idxs = self.idxs[self.ids[idx]]
@@ -42,10 +42,10 @@ class InferenceDataset(Dataset):
 
         batch = []
 
-        for start in np.arange(0, 60, duration):
-            start = np.clip(start, 0, 60 - duration)
-            a = audio[int(start * sample_rate):int((start + duration) * sample_rate)]
-            data = preprocess_audio(a, nperseg, sample_rate, normalize=True)
+        for start in np.arange(0, 60, self.duration):
+            start = np.clip(start, 0, 60 - self.duration)
+            a = audio[int(start * sample_rate):int((start + self.duration) * sample_rate)]
+            data = preprocess_audio(a, sample_rate, normalize=self.normalize)
             batch.append(data[None, None, :])
 
         batch = np.concatenate(batch, axis=0)
@@ -64,8 +64,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--model', '-m', type=str)
     parser.add_argument('--dir', '-d', type=str, default='/datasets/data/birds/test/')
+    parser.add_argument('--normalize', type=int, default=1)
+    parser.add_argument('--duration', type=float, default=6.0)
 
     args = parser.parse_args()
+    args.normalize = bool(args.normalize)
 
     model = torch.load(args.model)
     model.cuda()
@@ -74,7 +77,7 @@ if __name__ == '__main__':
     rows = []
 
     sub = pd.read_csv('/datasets/data/birds/sample_submission.csv')
-    ds = InferenceDataset(sub, args.dir)
+    ds = InferenceDataset(sub, args.dir, duration=args.duration, normalize=args.normalize)
 
     dl = DataLoader(ds, collate_fn=lambda x: x, shuffle=False, batch_size=1, num_workers=12)
     with torch.no_grad():

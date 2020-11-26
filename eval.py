@@ -37,7 +37,9 @@ if __name__ == '__main__':
 
     _, val_ds = get_datasets(fold=args.fold, normalize=args.normalize, pos_rate=args.pos_rate, duration=args.duration)
 
-    ds = InferenceDataset(val_ds.df[val_ds.df['negative'] == 0], '/datasets/data/birds/train/')
+    ds = InferenceDataset(val_ds.df[val_ds.df['negative'] == 0], '/datasets/data/birds/train/',
+                          duration=args.duration,
+                          normalize=args.normalize)
     dl = DataLoader(ds, collate_fn=lambda x: x, shuffle=False, batch_size=1, num_workers=12)
 
     gts = []

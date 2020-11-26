@@ -37,10 +37,10 @@ class SndTransform(BaseWaveformTransform):
         return f(samples)
 
 
-def preprocess_audio(audio, nperseg, sample_rate, normalize=False):
+def preprocess_audio(audio_samples, sample_rate, normalize=False):
     if normalize:
-        audio = am.Normalize(p=1.0)(samples=audio, sample_rate=sample_rate)
-    sxx = lb.feature.melspectrogram(audio, sr=sample_rate, n_mels=128, hop_length=1024)
+        audio_samples = am.Normalize(p=1.0)(samples=audio_samples, sample_rate=sample_rate)
+    sxx = lb.feature.melspectrogram(audio_samples, sr=sample_rate, n_mels=128, hop_length=1024)
 
     data = lb.power_to_db(sxx)
     return data
@@ -223,7 +223,7 @@ class TrainBirdDataset(Dataset):
 
         audio_sample = self.transforms(samples=audio_sample, sample_rate=self.sr)
 
-        data = preprocess_audio(audio_sample, None, self.sr, normalize=self.normalise)
+        data = preprocess_audio(audio_sample, self.sr, normalize=self.normalise)
         t = np.clip(t, 0, 1)
         return {
             'x': data[None, :],
@@ -235,7 +235,7 @@ class TrainBirdDataset(Dataset):
 
 
 class BirdDataset(Dataset):
-    def __init__(self, df, ds_dir='/datasets/data/birds/train/', pos_rate=0.5, duration=6.0, nperseg=1032,
+    def __init__(self, df, ds_dir='/datasets/data/birds/train/', pos_rate=0.5, duration=6.0,
                  disable_negative=False, is_val=False, normalize=False):
         self.df = df
         self.path = ds_dir
@@ -251,7 +251,6 @@ class BirdDataset(Dataset):
         self.duration = duration
         self.pos_rate = pos_rate
         self.epsilon = 0.1
-        self.nperseg = nperseg
         self.ids = self.df['recording_id'].unique()
         self.idxs = {i: [] for i in self.ids}
         self.is_val = is_val
@@ -308,7 +307,7 @@ class BirdDataset(Dataset):
             #     audio_sample = audio.audio_filter(audio_sample, 'lowpass', hfreq, wet)
 
             audio_sample = self.transforms(samples=audio_sample, sample_rate=sample_rate)
-        data = preprocess_audio(audio_sample, self.nperseg, self.sample_rate, normalize=self.normalize)
+        data = preprocess_audio(audio_sample, self.sample_rate, normalize=self.normalize)
 
         item = {
             'x': data[None, :],
