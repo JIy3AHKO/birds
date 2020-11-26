@@ -1,8 +1,8 @@
 from torch import nn
 import torch
-from torchvision.models import resnet34, resnet18, resnet50
+from torchvision.models import resnet34, resnet18, resnet50, densenet121
 from efficientnet_pytorch import EfficientNet
-
+from panns_inference.models import Cnn14
 
 models = {
     'resnet50': (resnet50, 2048),
@@ -14,6 +14,34 @@ pools = {
     'max': nn.AdaptiveMaxPool2d,
     'avg': nn.AdaptiveAvgPool2d,
 }
+
+
+class Densenet(nn.Module):
+    def __init__(self, num_classes=24, pool='avg', dropout=0.4):
+        super().__init__()
+
+        self.d = densenet121(pretrained=True)
+        self.filters = 1024
+        self.adapt_pool = pools[pool]
+
+        self.regressor = nn.Sequential(
+            nn.PReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(self.filters, num_classes),
+        )
+
+    def forward(self, x):
+        x = x['x']
+        x = torch.cat([x, x, x], dim=1)
+        x = self.d.features(x)
+        x = torch.nn.functional.relu(x, inplace=True)
+
+        features = self.adapt_pool(1)(x).view(-1, self.filters)
+        features = features.view(x.size(0), -1)
+
+        res = self.regressor(features)
+
+        return {'y': res}
 
 
 class Resnet(nn.Module):
@@ -61,13 +89,13 @@ class Resnet(nn.Module):
 
 
 class Effnet(nn.Module):
-    def __init__(self, num_classes=24, model_type="efficientnet-b0", pool='avg'):
+    def __init__(self, num_classes=24, model_type="efficientnet-b0", pool='avg', dropout=0.4):
         super().__init__()
         self.effnet = EfficientNet.from_pretrained(model_type, advprop=True)
         self.adapt_pool = pools[pool]
         self.filters = 1280
         self.regressor = nn.Sequential(
-            nn.Dropout(0.4),
+            nn.Dropout(dropout),
             nn.Linear(self.filters, 128),
             nn.BatchNorm1d(128),
             nn.PReLU(),
@@ -85,3 +113,14 @@ class Effnet(nn.Module):
         res = self.regressor(features)
 
         return {'y': res}
+
+
+def get_model(name, dropout):
+    if 'resnet' in name:
+        return Resnet(model_type=name, dropout=dropout)
+    elif 'densenet' in name:
+        return Densenet(dropout=dropout)
+    elif 'efficientnet' in name:
+        return Effnet(model_type=name, dropout=dropout)
+    else:
+        raise ValueError(f"not supported model {name}")

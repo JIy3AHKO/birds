@@ -41,11 +41,8 @@ def preprocess_audio(audio, nperseg, sample_rate, normalize=False):
     if normalize:
         audio = am.Normalize(p=1.0)(samples=audio, sample_rate=sample_rate)
     sxx = lb.feature.melspectrogram(audio, sr=sample_rate, n_mels=128, hop_length=1024)
-    # freq_idx = np.max(np.argwhere(f <= 14000))
-    #
-    # sxx = sxx[:freq_idx]
 
-    data = np.log10(sxx + 1e-16)
+    data = lb.power_to_db(sxx)
     return data
 
 
@@ -206,11 +203,11 @@ class TrainBirdDataset(Dataset):
 
             pos['a'] = am.TimeStretch(leave_length_unchanged=False, p=0.15)(samples=pos['a'], sample_rate=self.sr)
 
-            pos['a'] = audio.audio_filter(pos['a'],
-                                          mode='bandpass',
-                                          w=[pos['f_min'],
-                                             pos['f_max']],
-                                          wet=np.random.uniform(0.75, 1.0))
+            # pos['a'] = audio.audio_filter(pos['a'],
+            #                               mode='bandpass',
+            #                               w=[pos['f_min'],
+            #                                  pos['f_max']],
+            #                               wet=np.random.uniform(0.75, 1.0))
 
             if len(pos['a']) > int(self.duration * self.sr):
                 pos['a'] = pos['a'][:int(self.duration * self.sr)]

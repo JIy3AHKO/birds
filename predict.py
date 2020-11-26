@@ -15,7 +15,7 @@ from dataset import preprocess_audio, get_target
 from model import Resnet
 import soundfile as sf
 
-duration = 6
+duration = 3
 nperseg = 1032
 sample_rate = 48000
 

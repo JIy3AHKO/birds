@@ -1,7 +1,9 @@
 import os
-
 os.environ['MKL_NUM_THREADS'] = "1"
 os.environ['OPENBLAS_NUM_THREADS'] = "1"
+
+
+from misc import lsep_loss_stable as lsep_loss
 
 import argparse
 from torch.utils.data import DataLoader
@@ -12,7 +14,7 @@ import numpy as np
 from opt import AdaBelief, TrapezoidScheduler
 from dataset import get_datasets
 from trainer import Trainer
-from model import Resnet, Effnet
+from model import Resnet, Effnet, get_model
 from sklearn.metrics import label_ranking_average_precision_score
 
 
@@ -51,6 +53,7 @@ if __name__ == '__main__':
     parser.add_argument('--bs', type=int, default=16)
     parser.add_argument('--normalize', type=int, default=1)
     parser.add_argument('--pos_rate', type=float, default=0.75)
+    parser.add_argument('--duration', type=float, default=6.0)
 
     args = parser.parse_args()
     experiment_name = ""
@@ -65,7 +68,10 @@ if __name__ == '__main__':
     train_size = 1000
     batch_size = args.bs
 
-    train_ds, val_ds = get_datasets(fold=args.fold, normalize=args.normalize, pos_rate=args.pos_rate)
+    train_ds, val_ds = get_datasets(fold=args.fold,
+                                    normalize=args.normalize,
+                                    pos_rate=args.pos_rate,
+                                    duration=args.duration)
     train_loader = DataLoader(train_ds,
                               batch_size=batch_size,
                               shuffle=True,
@@ -80,7 +86,7 @@ if __name__ == '__main__':
 
     n_epochs = 40
 
-    model = Resnet(model_type=args.model, dropout=args.dropout).cuda()
+    model = get_model(name=args.model, dropout=args.dropout).cuda()
 
     def bce_loss(y_pred, y_true):
         bce = torch.nn.functional.binary_cross_entropy_with_logits(
@@ -92,14 +98,17 @@ if __name__ == '__main__':
         # F_loss = 1.0 * (1 - pt) ** 2 * bce
         # F_loss = F_loss.mean()
 
-        return bce.mean(), {'bce': bce.mean()}
+        lsep = lsep_loss(y_pred['y'], y_true['y'])
+
+        return lsep, {'bce': bce.mean(), 'lsep': lsep}
 
     def val_loss(y_pred, y_true):
         bce = f.binary_cross_entropy_with_logits(y_pred['y'], y_true['y'])
         lrap = label_ranking_average_precision_score(y_true['y'].detach().cpu().numpy(),
                                                      torch.sigmoid(y_pred['y']).detach().cpu().numpy())
+        lsep = lsep_loss(y_pred['y'], y_true['y'])
 
-        return lrap, {'bce': bce, 'lrap': lrap}
+        return lrap, {'bce': bce, 'lrap': lrap, 'lsep': lsep}
 
     trainer = Trainer(n_epochs,
                       model,
