@@ -54,6 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--normalize', type=int, default=1)
     parser.add_argument('--pos_rate', type=float, default=0.75)
     parser.add_argument('--duration', type=float, default=6.0)
+    parser.add_argument('--dssize', type=int, default=5000)
 
     args = parser.parse_args()
     experiment_name = ""
@@ -71,7 +72,8 @@ if __name__ == '__main__':
     train_ds, val_ds = get_datasets(fold=args.fold,
                                     normalize=args.normalize,
                                     pos_rate=args.pos_rate,
-                                    duration=args.duration)
+                                    duration=args.duration,
+                                    dssize=args.dssize)
     train_loader = DataLoader(train_ds,
                               batch_size=batch_size,
                               shuffle=True,
@@ -99,8 +101,9 @@ if __name__ == '__main__':
         # F_loss = F_loss.mean()
 
         lsep = lsep_loss(y_pred['y'], y_true['y'])
+        loss = bce.mean() * 0.1 + lsep
 
-        return lsep, {'bce': bce.mean(), 'lsep': lsep}
+        return loss, {'bce': bce.mean(), 'lsep': lsep}
 
     def val_loss(y_pred, y_true):
         bce = f.binary_cross_entropy_with_logits(y_pred['y'], y_true['y'])

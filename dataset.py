@@ -75,15 +75,15 @@ class PosDataset(Dataset):
 
         audio_path = os.path.join(self.path, f'{samples.iloc[0].recording_id}.flac')
 
-        pos_interval_lengths = []
-        for label_id in idxs:
-            sample = self.df.iloc[label_id]
-            pos_interval_lengths.append(sample['t_max'] - sample['t_min'])
+        # pos_interval_lengths = []
+        # for label_id in idxs:
+        #     sample = self.df.iloc[label_id]
+        #     pos_interval_lengths.append(sample['t_max'] - sample['t_min'])
+        #
+        # probs = np.array(pos_interval_lengths)
+        # probs /= probs.sum()
 
-        probs = np.array(pos_interval_lengths)
-        probs /= probs.sum()
-
-        interval = np.random.choice(np.arange(len(idxs)), p=probs)
+        interval = np.random.choice(np.arange(len(idxs)))
 
         sample = self.df.iloc[idxs[interval]]
 
@@ -321,7 +321,7 @@ class BirdDataset(Dataset):
         return len(self.ids)
 
 
-def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75, duration=6.0):
+def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75, duration=6.0, dssize=5000):
     csv_pos = pd.read_csv('/datasets/data/birds/train_tp_prep.csv')
     csv_neg = pd.read_csv('/datasets/data/birds/train_fp_prep.csv')
 
@@ -348,7 +348,7 @@ def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75
 
     train_datasets = ConcatDataset([
         BirdDataset(train_df, pos_rate=pos_rate, disable_negative=False, normalize=normalize, duration=duration),
-        TrainBirdDataset(pos_ds, neg_ds, normalise=normalize, duration=duration)
+        TrainBirdDataset(pos_ds, neg_ds, normalise=normalize, duration=duration, size=dssize)
     ])
 
     return train_datasets, BirdDataset(test_df, pos_rate=1.0, is_val=True, normalize=normalize, duration=duration)

@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 
 os.environ['MKL_NUM_THREADS'] = "1"
 os.environ['OPENBLAS_NUM_THREADS'] = "1"
@@ -16,6 +17,17 @@ from model import Resnet
 import soundfile as sf
 
 sample_rate = 48000
+
+
+class Ensamble(torch.nn.Module):
+    def __init__(self, models):
+        super().__init__()
+        self.models = models
+
+    def forward(self, x):
+        res = [m(x) for m in self.models]
+
+        return {'y': torch.mean(torch.cat([r['y'][None] for r in res], dim=0), dim=0)}
 
 
 class InferenceDataset(Dataset):
@@ -66,13 +78,28 @@ if __name__ == '__main__':
     parser.add_argument('--dir', '-d', type=str, default='/datasets/data/birds/test/')
     parser.add_argument('--normalize', type=int, default=1)
     parser.add_argument('--duration', type=float, default=6.0)
+    parser.add_argument('--allfolds', action='store_true')
 
     args = parser.parse_args()
     args.normalize = bool(args.normalize)
 
-    model = torch.load(args.model)
-    model.cuda()
-    model.eval()
+
+    if args.allfolds:
+        models = []
+
+        for fold in range(5):
+            args.fold = fold
+            foldname_ = re.findall('_fold-\d+_', args.model)[0]
+            args.model = args.model.replace(foldname_, f'_fold-{fold}_')
+            model = torch.load(args.model)
+            model.cuda()
+            model.eval()
+            models.append(model)
+        model = Ensamble(models)
+    else:
+        model = torch.load(args.model)
+        model.cuda()
+        model.eval()
 
     rows = []
 
