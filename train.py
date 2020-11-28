@@ -53,8 +53,8 @@ if __name__ == '__main__':
     parser.add_argument('--bs', type=int, default=16)
     parser.add_argument('--normalize', type=int, default=1)
     parser.add_argument('--pos_rate', type=float, default=0.75)
-    parser.add_argument('--duration', type=float, default=6.0)
-    parser.add_argument('--dssize', type=int, default=5000)
+    parser.add_argument('--duration', type=float, default=15.0)
+    parser.add_argument('--dssize', type=int, default=10000)
 
     args = parser.parse_args()
     experiment_name = ""
