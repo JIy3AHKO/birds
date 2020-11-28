@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from torch import nn
 import torch
 from torchvision.models import resnet34, resnet18, resnet50, densenet121
@@ -15,6 +17,16 @@ pools = {
     'max': nn.AdaptiveMaxPool2d,
     'avg': nn.AdaptiveAvgPool2d,
 }
+
+
+@lru_cache(maxsize=8)
+def get_coordinate_grid(shape, device):
+    g = torch.arange(shape[2], requires_grad=False).float()
+    g = g.repeat(shape[3]).view(1, 1, shape[3], shape[2]).transpose(3, 2)
+    g /= shape[2]
+    g = g.repeat(shape[0], 1, 1, 1)
+    return g.to(device)
+
 
 class Cnn14(nn.Module):
     def __init__(self):
@@ -43,7 +55,8 @@ class Densenet(nn.Module):
 
     def forward(self, x):
         x = x['x']
-        x = torch.cat([x, x, x], dim=1)
+        grid = get_coordinate_grid(x.shape, x.device)
+        x = torch.cat([x, x, grid], dim=1)
         x = self.d.features(x)
         x = torch.nn.functional.relu(x, inplace=True)
 
@@ -94,7 +107,8 @@ class Resnet(nn.Module):
     def forward(self, input):
         x = input['x']
         x = self.transforms(x)
-        x = torch.cat([x, x, x], dim=1)
+        grid = get_coordinate_grid(x.shape, x.device)
+        x = torch.cat([x, x, grid], dim=1)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
