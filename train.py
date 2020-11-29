@@ -20,9 +20,8 @@ from sklearn.metrics import label_ranking_average_precision_score
 
 def vis_fn(batch, pred):
 
-    imgs = batch['x'][:8].detach().cpu().numpy()
+    imgs = np.empty((8, 3, 10, 10))
 
-    imgs = (imgs - imgs.min()) / (imgs.max() - imgs.min()) * 255
     imgs = imgs.astype('uint8')
     #imgs = imgs.transpose(0, 2, 3, 1)
 
@@ -50,7 +49,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=float, default=0.45)
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--bs', type=int, default=16)
+    parser.add_argument('--bs', type=int, default=64)
     parser.add_argument('--normalize', type=int, default=1)
     parser.add_argument('--pos_rate', type=float, default=0.75)
     parser.add_argument('--duration', type=float, default=15.0)
@@ -86,7 +85,7 @@ if __name__ == '__main__':
                             pin_memory=True,
                             num_workers=12 if not args.debug else 0)
 
-    n_epochs = 40
+    n_epochs = 30
 
     model = get_model(name=args.model, dropout=args.dropout).cuda()
 

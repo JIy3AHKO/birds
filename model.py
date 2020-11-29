@@ -3,6 +3,7 @@ import torch
 from torchvision.models import resnet34, resnet18, resnet50, densenet121
 from efficientnet_pytorch import EfficientNet
 from panns_inference.models import Cnn14
+import torchaudio as ta
 
 models = {
     'resnet50': (resnet50, 2048),
@@ -67,8 +68,22 @@ class Resnet(nn.Module):
             nn.Linear(self.filters, num_classes),
         )
 
+        self.transforms = nn.Sequential(
+            ta.transforms.MelSpectrogram(
+                sample_rate=48000,
+                n_fft=1024 * 2,
+                win_length=1024 * 2,
+                hop_length=1024 * 2,
+                f_min=50,
+                f_max=14000,
+                n_mels=64
+            ),
+            ta.transforms.AmplitudeToDB(top_db=80),
+        )
+
     def forward(self, input):
         x = input['x']
+        x = self.transforms(x)
         x = torch.cat([x, x, x], dim=1)
         x = self.conv1(x)
         x = self.bn1(x)

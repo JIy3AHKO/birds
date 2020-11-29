@@ -38,12 +38,8 @@ class SndTransform(BaseWaveformTransform):
 
 
 def preprocess_audio(audio_samples, sample_rate, normalize=False):
-    if normalize:
-        audio_samples = am.Normalize(p=1.0)(samples=audio_samples, sample_rate=sample_rate)
-    sxx = lb.feature.melspectrogram(audio_samples, sr=sample_rate, n_mels=128, hop_length=1024)
 
-    data = lb.power_to_db(sxx)
-    return data
+    return audio_samples.astype('float32')
 
 
 def get_target(num_classes, samples, start, end):
