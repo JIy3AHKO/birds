@@ -2,7 +2,7 @@ from torch import nn
 import torch
 from torchvision.models import resnet34, resnet18, resnet50, densenet121
 from efficientnet_pytorch import EfficientNet
-from panns_inference.models import Cnn14
+from pann import Cnn14_DecisionLevelAtt
 import torchaudio as ta
 
 models = {
@@ -16,6 +16,16 @@ pools = {
     'avg': nn.AdaptiveAvgPool2d,
 }
 
+class Cnn14(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.m = Cnn14_DecisionLevelAtt(48000, 1024 * 2, 1024 * 2, 64, 50, 14000, 24)
+
+    def forward(self, x):
+        x = self.m(x['x'])
+        x['y'] = x['clipwise_output']
+
+        return x
 
 class Densenet(nn.Module):
     def __init__(self, num_classes=24, pool='avg', dropout=0.4):
@@ -137,5 +147,7 @@ def get_model(name, dropout):
         return Densenet(dropout=dropout)
     elif 'efficientnet' in name:
         return Effnet(model_type=name, dropout=dropout)
+    elif 'cnn14' in name:
+        return Cnn14()
     else:
         raise ValueError(f"not supported model {name}")
