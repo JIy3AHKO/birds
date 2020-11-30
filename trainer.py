@@ -148,7 +148,7 @@ class Trainer:
         detailed_info = defaultdict(lambda: [])
 
         for i, batch in enumerate(pbar):
-            batch = {k: v.cuda() for k, v in batch.items()}
+            batch = {k: v.cuda() if not isinstance(v, list) else v for k, v in batch.items()}
             optimizer.zero_grad()
             pred = self.model(batch)
 
@@ -187,7 +187,7 @@ class Trainer:
         with torch.no_grad():
 
             for i, batch in enumerate(pbar):
-                batch = {k: v.cuda() for k, v in batch.items()}
+                batch = {k: v.cuda() if not isinstance(v, list) else v for k, v in batch.items()}
 
                 pred = self.model(batch)
                 loss, val_details = self.val_loss(pred, batch)

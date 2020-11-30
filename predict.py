@@ -27,7 +27,7 @@ class Ensamble(torch.nn.Module):
     def forward(self, x):
         res = [m(x) for m in self.models]
 
-        return {'y': torch.mean(torch.cat([r['y'][None] for r in res], dim=0), dim=0)}
+        return {'clipwise_output': torch.mean(torch.cat([r['clipwise_output'][None] for r in res], dim=0), dim=0)}
 
 
 class InferenceDataset(Dataset):
@@ -50,7 +50,7 @@ class InferenceDataset(Dataset):
         audio, sample_rate = sf.read(os.path.join(self.dir, f"{samples.iloc[0]['recording_id']}.flac"), dtype='float32')
         item = {}
         if 'species_id' in samples.iloc[0]:
-            item['target'] = get_target(self.num_classes, samples, 0, 60)
+            item['clipwise_target'], item['framewise_target'] = get_target(self.num_classes, samples, 0, 60)
 
         batch = []
 
@@ -112,7 +112,7 @@ if __name__ == '__main__':
             batch = {'x': torch.from_numpy(batch_orig[0]['batch']).cuda()}
 
             res = model(batch)
-            res = torch.sigmoid(res['y'])
+            res = torch.sigmoid(res['clipwise_output'])
             res = res.detach().cpu().numpy()
             res = res.max(0)
 

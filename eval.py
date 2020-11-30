@@ -34,12 +34,12 @@ def get_scores(args):
             batch = {'x': torch.from_numpy(batch_orig[0]['batch']).cuda()}
 
             res = model(batch)
-            res = torch.sigmoid(res['y'])
+            res = torch.sigmoid(res['clipwise_output'])
             res = res.detach().cpu().numpy()
             res = res.max(0)
 
             preds.append(res)
-            gts.append(batch_orig[0]['target'])
+            gts.append(batch_orig[0]['clipwise_target'])
 
         score_class, weight = lwlrap(np.array(gts), np.array(preds))
         score = (score_class * weight).sum()
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     parser.add_argument('--bs', type=int, default=16)
     parser.add_argument('--normalize', type=int, default=1)
     parser.add_argument('--pos_rate', type=float, default=0.75)
-    parser.add_argument('--duration', type=float, default=6.0)
+    parser.add_argument('--duration', type=float, default=15.0)
 
     args = parser.parse_args()
     args.normalize = bool(args.normalize)

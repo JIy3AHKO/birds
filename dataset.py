@@ -38,18 +38,26 @@ class SndTransform(BaseWaveformTransform):
 
 
 def preprocess_audio(audio_samples, sample_rate, normalize=False):
-
     return audio_samples.astype('float32')
 
 
 def get_target(num_classes, samples, start, end):
-    target = np.zeros(num_classes, dtype='float32')
+    clipwise_target = np.zeros(num_classes, dtype='float32')
+    framewise_target = []
 
     for i, item in samples.iterrows():
-        if item['negative'] == 0 and is_intersect(start, end, item['t_min'], item['t_max']):
-            target[item['species_id']] = 1.0
+        if item['negative'] == 0:
+            if is_intersect(start, end, item['t_min'], item['t_max']):
+                clipwise_target[item['species_id']] = 1.0
+                framewise_target.append(
+                    [
+                        np.clip(item['t_min'] - start, 0, end - start),
+                        np.clip(item['t_max'] - start, 0, end - start),
+                        item['species_id']
+                     ]
+                )
 
-    return target
+    return clipwise_target, framewise_target
 
 
 class PosDataset(Dataset):
@@ -86,7 +94,7 @@ class PosDataset(Dataset):
         start = np.clip(sample['t_min'] - self.overlap, 0, 60)
         end = np.clip(sample['t_max'] + self.overlap, 0, 60)
 
-        target = get_target(self.num_classes, samples, start, end)
+        clipwise_target, framewise_target = get_target(self.num_classes, samples, start, end)
 
         start = int(start * self.sample_rate)
         end = int(end * self.sample_rate)
@@ -96,7 +104,15 @@ class PosDataset(Dataset):
                                             stop=end,
                                             dtype='float32')
 
-        return {'a': audio_sample, 't': target, 'f_min': sample['f_min'], 'f_max': sample['f_max']}
+
+
+        return {
+            'a': audio_sample,
+            'clipwise_target': clipwise_target,
+            'framewise_target': framewise_target,
+            'f_min': sample['f_min'],
+            'f_max': sample['f_max'],
+        }
 
     def __len__(self):
         return len(self.ids)
@@ -139,7 +155,7 @@ class NegDataset(Dataset):
         start = np.random.uniform(start, end - self.duration)
         end = start + self.duration
 
-        target = get_target(self.num_classes, samples, start, end)
+        clipwise_target, framewise_target = get_target(self.num_classes, samples, start, end)
 
         start = int(start * self.sample_rate)
         end = int(end * self.sample_rate)
@@ -150,7 +166,11 @@ class NegDataset(Dataset):
                                      dtype='float32')
         if len(audio) == 0:
             raise ValueError()
-        return {'a': audio, 't': target}
+        return {
+            'a': audio,
+            'clipwise_target': clipwise_target,
+            'framewise_target': framewise_target,
+        }
 
     def __len__(self):
         return len(self.ids)
@@ -186,10 +206,10 @@ class TrainBirdDataset(Dataset):
             audio_sample = noise['a']
             audio_sample = am.Normalize(p=1.0)(samples=audio_sample, sample_rate=self.sr)
 
-            t = noise['t']
+            clipwise_target, framewise_target = noise['clipwise_target'], noise['framewise_target']
         else:
             audio_sample = np.zeros(int(self.sr * self.duration), dtype='float32')
-            t = np.zeros(self.num_classes, dtype='float32')
+            clipwise_target, framewise_target = np.zeros(self.num_classes, dtype='float32'), []
 
         for i in range(self.additional_pos_count):
             if np.random.rand() > self.additional_pos_prob and i > 0:
@@ -215,15 +235,36 @@ class TrainBirdDataset(Dataset):
             positive_sample = am.Normalize(p=1.0)(samples=pos['a'], sample_rate=self.sr)
 
             audio_sample = audio.insert(audio_sample, positive_sample, position, alpha=alpha, fade=fade_size)
-            t += pos['t']
+
+            pos_clipwise, pos_framewise = pos['clipwise_target'], pos['framewise_target']
+            adjusted_framewise = []
+            for int_start, int_end, species_id in pos_framewise:
+                adjusted_framewise.append([
+                    int_start + position,
+                    int_end + position,
+                    species_id
+                ])
+
+            clipwise_target += pos_clipwise
+            framewise_target.extend(adjusted_framewise)
 
         audio_sample = self.transforms(samples=audio_sample, sample_rate=self.sr)
 
         data = preprocess_audio(audio_sample, self.sr, normalize=self.normalise)
-        t = np.clip(t, 0, 1)
+        clipwise_target = np.clip(clipwise_target, 0, 1)
+
+        normalized_framewise = []
+        for int_start, int_end, species_id in framewise_target:
+            normalized_framewise.append([
+                int_start / self.duration,
+                int_end / self.duration,
+                species_id
+            ])
+
         return {
             'x': data[None, :],
-            'y': t,
+            'clipwise_target': clipwise_target,
+            'framewise_target': np.array(normalized_framewise),
         }
 
     def __len__(self):
@@ -283,14 +324,14 @@ class BirdDataset(Dataset):
             start = np.random.uniform(0, 60 - self.duration - self.epsilon)
             end = start + self.duration
 
-        target = get_target(self.num_classes, samples, start, end)
+        clipwise_target, framewise_target = get_target(self.num_classes, samples, start, end)
 
         start = int(start * self.sample_rate)
         end = int(end * self.sample_rate)
         audio_sample, sample_rate = sf.read(audio_path,
-                                     start=start,
-                                     stop=end,
-                                     dtype='float32')
+                                            start=start,
+                                            stop=end,
+                                            dtype='float32')
 
         if not self.is_val:
             # if np.random.rand() < 0.1:
@@ -306,9 +347,18 @@ class BirdDataset(Dataset):
             audio_sample = self.transforms(samples=audio_sample, sample_rate=sample_rate)
         data = preprocess_audio(audio_sample, self.sample_rate, normalize=self.normalize)
 
+        normalized_framewise = []
+        for int_start, int_end, species_id in framewise_target:
+            normalized_framewise.append([
+                int_start / self.duration,
+                int_end / self.duration,
+                species_id
+            ])
+
         item = {
             'x': data[None, :],
-            'y': target,
+            'framewise_target': normalized_framewise,
+            'clipwise_target': clipwise_target
         }
 
         return item

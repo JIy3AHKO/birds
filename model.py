@@ -2,10 +2,13 @@ from functools import lru_cache
 
 from torch import nn
 import torch
+import torch.nn.functional as F
 from torchvision.models import resnet34, resnet18, resnet50, densenet121
 from efficientnet_pytorch import EfficientNet
-from pann import Cnn14_DecisionLevelAtt
+from pann import Cnn14_DecisionLevelAtt, AttBlock
 import torchaudio as ta
+
+from pytorch_utils import interpolate, pad_framewise_output
 
 models = {
     'resnet50': (resnet50, 2048),
@@ -80,6 +83,7 @@ class Resnet(nn.Module):
         self.relu = d.relu
         self.maxpool = d.maxpool
 
+        self.interpolate_ratio = 32
         self.layer1 = d.layer1
         self.layer2 = d.layer2
         self.layer3 = d.layer3
@@ -90,6 +94,9 @@ class Resnet(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(self.filters, num_classes),
         )
+
+        self.fc1 = nn.Linear(self.filters, self.filters)
+        self.att_block = AttBlock(self.filters, 24, activation='linear')
 
         self.transforms = nn.Sequential(
             ta.transforms.MelSpectrogram(
@@ -105,10 +112,13 @@ class Resnet(nn.Module):
         )
 
     def forward(self, input):
-        x = input['x']
-        x = self.transforms(x)
-        grid = get_coordinate_grid(x.shape, x.device)
-        x = torch.cat([x, x, grid], dim=1)
+        waveform = input['x']
+
+        spec = self.transforms(waveform)
+        frames_num = spec.shape[3]
+        grid = get_coordinate_grid(spec.shape, spec.device)
+
+        x = torch.cat([spec, spec, grid], dim=1)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -119,12 +129,31 @@ class Resnet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        features = self.adapt_pool(1)(x).view(-1, self.filters)
-        features = features.view(x.size(0), -1)
+        x = torch.mean(x, dim=2)
+        x1 = F.max_pool1d(x, kernel_size=3, stride=1, padding=1)
+        x2 = F.avg_pool1d(x, kernel_size=3, stride=1, padding=1)
+        x = x1 + x2
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = x.transpose(1, 2)
+        x = F.relu_(self.fc1(x))
+        x = x.transpose(1, 2)
+        x = F.dropout(x, p=0.5, training=self.training)
 
-        res = self.regressor(features)
+        (clipwise_output, _, segmentwise_output) = self.att_block(x)
+        segmentwise_output = segmentwise_output # .transpose(1, 2)
 
-        return {'y': res}
+        # # Get framewise output
+        # framewise_output = interpolate(segmentwise_output, self.interpolate_ratio)
+        # print(framewise_output.shape)
+        # framewise_output = pad_framewise_output(framewise_output, frames_num)
+
+        framewise_output = F.interpolate(segmentwise_output, frames_num, mode='linear', align_corners=True)
+
+        output_dict = {'framewise_output': framewise_output,
+                       'clipwise_output': clipwise_output,
+                       'spec': spec}
+
+        return output_dict
 
 
 class Effnet(nn.Module):
