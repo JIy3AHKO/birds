@@ -183,14 +183,14 @@ if __name__ == '__main__':
             reduction='none')
 
         iou = 1 - iou_continuous(torch.sigmoid(y_pred['framewise_output']), framewise, axes=-1)
-        iou = iou[iou.sum(1) > 0].mean()
+        iou = iou[framewise.sum(2) > 0].mean()
 
         # pt = torch.exp(-bce)
         # F_loss = 1.0 * (1 - pt) ** 2 * bce
         # F_loss = F_loss.mean()
 
         lsep = lsep_loss(y_pred['clipwise_output'], y_true['clipwise_target'])
-        loss = bce.mean() * 10 + lsep + iou
+        loss = lsep + iou + bce.mean()
 
         return loss, {'bce': bce.mean(), 'lsep': lsep, 'iou': iou}
 
@@ -225,7 +225,7 @@ if __name__ == '__main__':
                       fn_type='image')
 
     opt = AdaBelief(trainer.model.parameters(), lr=args.lr, weight_decay=args.wd, weight_decouple=True)
-    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, patience=3, verbose=True, factor=0.33)
+    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, patience=5, verbose=True, factor=0.33)
     #sch = TrapezoidScheduler(opt, 50).scheduler
 
     trainer.fit(train_loader, val_loader, opt, sch)

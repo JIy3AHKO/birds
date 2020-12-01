@@ -5,6 +5,8 @@ import torch
 import torch.nn.functional as F
 from torchvision.models import resnet34, resnet18, resnet50, densenet121
 from efficientnet_pytorch import EfficientNet
+
+from misc import spec_augment
 from pann import Cnn14_DecisionLevelAtt, AttBlock
 import torchaudio as ta
 
@@ -119,6 +121,10 @@ class Resnet(nn.Module):
         waveform = input['x']
 
         spec = self.transforms(waveform)
+        #
+        # if self.training:
+        #     spec = spec_augment(spec)
+
         frames_num = spec.shape[3]
         grid = get_coordinate_grid(spec.shape, spec.device)
 

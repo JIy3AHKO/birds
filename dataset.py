@@ -277,8 +277,8 @@ class BirdDataset(Dataset):
         self.df = df
         self.path = ds_dir
         self.transforms = am.Compose([
-            am.AddGaussianSNR(),
-            am.AddGaussianNoise()
+            # am.AddGaussianSNR(),
+            # am.AddGaussianNoise()
             # am.TimeStretch(p=0.15),
             # am.PitchShift(min_semitones=-1, max_semitones=1, p=0.15),
             # am.TimeMask(p=0.2, max_band_part=0.33)
