@@ -1,4 +1,5 @@
 import os
+from functools import partial
 
 from torch.utils.data.dataloader import default_collate
 
@@ -20,6 +21,7 @@ from dataset import get_datasets
 from trainer import Trainer
 from model import Resnet, Effnet, get_model
 from sklearn.metrics import label_ranking_average_precision_score
+
 
 
 def generate_bgr_palette(count: int, scale: float = 1 / 255, as_hex=False) -> list:
@@ -155,6 +157,17 @@ if __name__ == '__main__':
 
     model = get_model(name=args.model, dropout=args.dropout).cuda()
 
+
+    def iou_continuous(y_pred, y_true, axes=(-1, -2)):
+        _EPSILON = 1e-6
+
+        def op_sum(x):
+            return x.sum(axes)
+
+        numerator = (op_sum(y_true * y_pred) + _EPSILON)
+        denominator = (op_sum(y_true ** 2) + op_sum(y_pred ** 2) - op_sum(y_true * y_pred) + _EPSILON)
+        return numerator / denominator
+
     def bce_loss(y_pred, y_true):
         framewise = torch.zeros_like(y_pred['framewise_output'], requires_grad=False)
 
@@ -169,14 +182,17 @@ if __name__ == '__main__':
             framewise,
             reduction='none')
 
+        iou = 1 - iou_continuous(torch.sigmoid(y_pred['framewise_output']), framewise, axes=-1)
+        iou = iou[iou.sum(1) > 0].mean()
+
         # pt = torch.exp(-bce)
         # F_loss = 1.0 * (1 - pt) ** 2 * bce
         # F_loss = F_loss.mean()
 
         lsep = lsep_loss(y_pred['clipwise_output'], y_true['clipwise_target'])
-        loss = bce.mean() * 10 + lsep
+        loss = bce.mean() * 10 + lsep + iou
 
-        return loss, {'bce': bce.mean(), 'lsep': lsep}
+        return loss, {'bce': bce.mean(), 'lsep': lsep, 'iou': iou}
 
     def val_loss(y_pred, y_true):
         framewise = torch.zeros_like(y_pred['framewise_output'], requires_grad=False)
@@ -187,6 +203,9 @@ if __name__ == '__main__':
                 e = int(e * framewise.shape[2])
                 framewise[sample_id, int(i), s:e] = 1.0
 
+        iou = iou_continuous(torch.sigmoid(y_pred['framewise_output']), framewise, axes=-1)
+        iou = iou[framewise.sum(-1) > 0].mean()
+
         bce = torch.nn.functional.binary_cross_entropy_with_logits(
             y_pred['framewise_output'],
             framewise)
@@ -194,7 +213,7 @@ if __name__ == '__main__':
                                                      torch.sigmoid(y_pred['clipwise_output']).detach().cpu().numpy())
         lsep = lsep_loss(y_pred['clipwise_output'], y_true['clipwise_target'])
 
-        return lrap, {'bce': bce, 'lrap': lrap, 'lsep': lsep}
+        return lrap, {'bce': bce, 'lrap': lrap, 'lsep': lsep, 'iou': iou}
 
     trainer = Trainer(n_epochs,
                       model,

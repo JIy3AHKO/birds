@@ -73,7 +73,11 @@ class Densenet(nn.Module):
 
 class Resnet(nn.Module):
 
-    def __init__(self, num_classes=24, model_type='resnet50', pool='avg', dropout=0.4):
+    def __init__(self,
+                 num_classes=24,
+                 model_type='resnet50',
+                 pool='avg',
+                 dropout=0.4):
         super().__init__()
         self.adapt_pool = pools[pool]
         d, self.filters = models[model_type]

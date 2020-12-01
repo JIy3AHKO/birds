@@ -20,14 +20,19 @@ sample_rate = 48000
 
 
 class Ensamble(torch.nn.Module):
-    def __init__(self, models):
+    def __init__(self, models, avg_mode='mean'):
         super().__init__()
         self.models = models
+        self.avg_mode = avg_mode
 
     def forward(self, x):
         res = [m(x) for m in self.models]
-
-        return {'clipwise_output': torch.mean(torch.cat([r['clipwise_output'][None] for r in res], dim=0), dim=0)}
+        if self.avg_mode == 'geomean':
+            return {'clipwise_output': torch.prod(torch.cat([torch.sigmoid(r['clipwise_output'][None]) + 1e-8 for r in res], dim=0), dim=0) ** (1 / len(self.models))}
+        elif self.avg_mode == 'mean':
+            return {'clipwise_output': torch.sigmoid(torch.mean(torch.cat([r['clipwise_output'][None] for r in res], dim=0), dim=0))}
+        else:
+            raise ValueError(f"Unsupported {self.avg_mode}")
 
 
 class InferenceDataset(Dataset):
@@ -77,7 +82,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', '-m', type=str)
     parser.add_argument('--dir', '-d', type=str, default='/datasets/data/birds/test/')
     parser.add_argument('--normalize', type=int, default=1)
-    parser.add_argument('--duration', type=float, default=6.0)
+    parser.add_argument('--duration', type=float, default=15.0)
     parser.add_argument('--allfolds', action='store_true')
 
     args = parser.parse_args()
@@ -112,7 +117,7 @@ if __name__ == '__main__':
             batch = {'x': torch.from_numpy(batch_orig[0]['batch']).cuda()}
 
             res = model(batch)
-            res = torch.sigmoid(res['clipwise_output'])
+            res = res['clipwise_output']
             res = res.detach().cpu().numpy()
             res = res.max(0)
 
