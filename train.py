@@ -23,7 +23,6 @@ from model import Resnet, Effnet, get_model
 from sklearn.metrics import label_ranking_average_precision_score
 
 
-
 def generate_bgr_palette(count: int, scale: float = 1 / 255, as_hex=False) -> list:
     """
     Return different colors in bgr colorspace :param count: number colors
@@ -105,6 +104,15 @@ def vis_fn(batch, pred):
     return imgs, text
 
 
+def parse_aug_args(arguments):
+    return {
+        'gaussian_snr': {
+            'max_SNR': arguments.gaussian_snr_max,
+            'p': arguments.gaussian_snr_p
+        }
+    }
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -116,14 +124,15 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--bs', type=int, default=64)
-    parser.add_argument('--normalize', type=int, default=1)
-    parser.add_argument('--pos_rate', type=float, default=0.75)
+    parser.add_argument('--pos_rate', type=float, default=1.0)
     parser.add_argument('--duration', type=float, default=15.0)
     parser.add_argument('--dssize', type=int, default=10000)
+    parser.add_argument('--gaussian_snr_max', type=float, default=0.4)
+    parser.add_argument('--gaussian_snr_p', type=float, default=0.4)
 
     args = parser.parse_args()
     experiment_name = ""
-    args.normalize = bool(args.normalize)
+
     for k, v in vars(args).items():
         experiment_name += f"{k}-{v}_" if k != "name" else f"{v}_"
 
@@ -135,10 +144,10 @@ if __name__ == '__main__':
     batch_size = args.bs
 
     train_ds, val_ds = get_datasets(fold=args.fold,
-                                    normalize=args.normalize,
                                     pos_rate=args.pos_rate,
                                     duration=args.duration,
-                                    dssize=args.dssize)
+                                    dssize=args.dssize,
+                                    aug_params=parse_aug_args(args))
     train_loader = DataLoader(train_ds,
                               batch_size=batch_size,
                               shuffle=True,

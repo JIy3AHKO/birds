@@ -9,11 +9,9 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
-from scipy.signal import spectrogram
 import tqdm
 
 from dataset import preprocess_audio, get_target
-from model import Resnet
 import soundfile as sf
 
 sample_rate = 48000
@@ -36,7 +34,7 @@ class Ensamble(torch.nn.Module):
 
 
 class InferenceDataset(Dataset):
-    def __init__(self, sub, dir, duration, normalize):
+    def __init__(self, sub, dir, duration):
         self.dir = dir
         self.df = sub
         self.ids = self.df['recording_id'].unique()
@@ -46,7 +44,6 @@ class InferenceDataset(Dataset):
 
         self.num_classes = 24
         self.duration = duration
-        self.normalize = normalize
 
     def __getitem__(self, idx):
         idxs = self.idxs[self.ids[idx]]
@@ -62,7 +59,7 @@ class InferenceDataset(Dataset):
         for start in np.arange(0, 60, self.duration):
             start = np.clip(start, 0, 60 - self.duration)
             a = audio[int(start * sample_rate):int((start + self.duration) * sample_rate)]
-            data = preprocess_audio(a, sample_rate, normalize=self.normalize)
+            data = preprocess_audio(a)
             batch.append(data[None, None, :])
 
         batch = np.concatenate(batch, axis=0)
@@ -81,13 +78,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--model', '-m', type=str)
     parser.add_argument('--dir', '-d', type=str, default='/datasets/data/birds/test/')
-    parser.add_argument('--normalize', type=int, default=1)
     parser.add_argument('--duration', type=float, default=15.0)
     parser.add_argument('--allfolds', action='store_true')
 
     args = parser.parse_args()
-    args.normalize = bool(args.normalize)
-
 
     if args.allfolds:
         models = []
@@ -109,7 +103,7 @@ if __name__ == '__main__':
     rows = []
 
     sub = pd.read_csv('/datasets/data/birds/sample_submission.csv')
-    ds = InferenceDataset(sub, args.dir, duration=args.duration, normalize=args.normalize)
+    ds = InferenceDataset(sub, args.dir, duration=args.duration)
 
     dl = DataLoader(ds, collate_fn=lambda x: x, shuffle=False, batch_size=1, num_workers=12)
     with torch.no_grad():

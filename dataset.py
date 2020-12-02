@@ -37,8 +37,8 @@ class SndTransform(BaseWaveformTransform):
         return f(samples)
 
 
-def preprocess_audio(audio_samples, sample_rate, normalize=False):
-    return audio_samples.astype('float32')
+def preprocess_audio(audio_samples):
+    return audio_samples
 
 
 def get_target(num_classes, samples, start, end):
@@ -177,7 +177,7 @@ class NegDataset(Dataset):
 
 
 class TrainBirdDataset(Dataset):
-    def __init__(self, pos_dataset, neg_dataset, duration=6.0, size=5000, normalise=False, sr=48000):
+    def __init__(self, pos_dataset, neg_dataset, duration=6.0, size=5000, sr=48000, augs=None):
         self.pos_ds = pos_dataset
         self.neg_ds = neg_dataset
         self.duration = duration
@@ -188,14 +188,7 @@ class TrainBirdDataset(Dataset):
         self.min_sample_len = 2 * self.sr
         self.sample_crop_limit = 0.5
         self.num_classes = 24
-        self.transforms = am.Compose([
-            am.AddGaussianSNR(),
-            # am.PitchShift(min_semitones=-1, max_semitones=1, p=0.15),
-            # am.TimeStretch(p=0.15),
-            # am.TimeMask(p=0.2, max_band_part=0.33)
-
-        ])
-        self.normalise = normalise
+        self.transforms = augs
 
     def __getitem__(self, idx):
         neg_id = np.random.randint(0, len(self.pos_ds))
@@ -250,7 +243,7 @@ class TrainBirdDataset(Dataset):
 
         audio_sample = self.transforms(samples=audio_sample, sample_rate=self.sr)
 
-        data = preprocess_audio(audio_sample, self.sr, normalize=self.normalise)
+        data = preprocess_audio(audio_sample)
         clipwise_target = np.clip(clipwise_target, 0, 1)
 
         normalized_framewise = []
@@ -273,17 +266,10 @@ class TrainBirdDataset(Dataset):
 
 class BirdDataset(Dataset):
     def __init__(self, df, ds_dir='/datasets/data/birds/train/', pos_rate=0.5, duration=6.0,
-                 disable_negative=False, is_val=False, normalize=False):
+                 disable_negative=False, is_val=False, augs=None):
         self.df = df
         self.path = ds_dir
-        self.transforms = am.Compose([
-            # am.AddGaussianSNR(),
-            # am.AddGaussianNoise()
-            # am.TimeStretch(p=0.15),
-            # am.PitchShift(min_semitones=-1, max_semitones=1, p=0.15),
-            # am.TimeMask(p=0.2, max_band_part=0.33)
-        ])
-
+        self.transforms = augs
         self.num_classes = 24
         self.sample_rate = 48000
         self.duration = duration
@@ -292,7 +278,6 @@ class BirdDataset(Dataset):
         self.ids = self.df['recording_id'].unique()
         self.idxs = {i: [] for i in self.ids}
         self.is_val = is_val
-        self.normalize = normalize
 
         for i, (_, item) in enumerate(self.df.iterrows()):
             self.idxs[item['recording_id']].append(i)
@@ -345,7 +330,7 @@ class BirdDataset(Dataset):
             #     audio_sample = audio.audio_filter(audio_sample, 'lowpass', hfreq, wet)
 
             audio_sample = self.transforms(samples=audio_sample, sample_rate=sample_rate)
-        data = preprocess_audio(audio_sample, self.sample_rate, normalize=self.normalize)
+        data = preprocess_audio(audio_sample)
 
         normalized_framewise = []
         for int_start, int_end, species_id in framewise_target:
@@ -367,7 +352,7 @@ class BirdDataset(Dataset):
         return len(self.ids)
 
 
-def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75, duration=6.0, dssize=5000):
+def get_datasets(seed=1337228, fold=0, n_folds=5, pos_rate=0.75, duration=6.0, dssize=5000, aug_params=None):
     csv_pos = pd.read_csv('/datasets/data/birds/train_tp_prep.csv')
     csv_neg = pd.read_csv('/datasets/data/birds/train_fp_prep.csv')
 
@@ -392,9 +377,27 @@ def get_datasets(seed=1337228, fold=0, n_folds=5, normalize=False, pos_rate=0.75
     pos_ds = PosDataset(csv_pos[csv_pos['recording_id'].isin(train_ids)])
     neg_ds = NegDataset(csv_pos[csv_pos['recording_id'].isin(train_ids)], duration=duration)
 
+    augs = build_augs(aug_params)
+
     train_datasets = ConcatDataset([
-        BirdDataset(train_df, pos_rate=pos_rate, disable_negative=False, normalize=normalize, duration=duration),
-        TrainBirdDataset(pos_ds, neg_ds, normalise=normalize, duration=duration, size=dssize)
+        BirdDataset(train_df, pos_rate=pos_rate, disable_negative=False, duration=duration, augs=augs),
+        TrainBirdDataset(pos_ds, neg_ds, duration=duration, size=dssize, augs=augs)
     ])
 
-    return train_datasets, BirdDataset(test_df, pos_rate=1.0, is_val=True, normalize=normalize, duration=duration)
+    return train_datasets, BirdDataset(test_df, pos_rate=1.0, is_val=True, duration=duration)
+
+
+def build_augs(aug_params):
+    augs = []
+
+    aug_params = aug_params or {}
+
+    available_augs = {
+        'gauss_snr': am.AddGaussianSNR
+    }
+
+    for aug_key, aug_f in available_augs.items():
+        if aug_key in aug_params:
+            augs.append(aug_f(**aug_params[aug_key]))
+
+    return am.Compose(augs)
