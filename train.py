@@ -56,11 +56,13 @@ def collate_fn(batch):
 def draw_bars_gt(h, w, framewise_target):
     bar = np.zeros((1, 3, h * 24, w), dtype='uint8')
 
-    for s, e, i in framewise_target:
+    for s, e, i, is_neg in framewise_target:
         s = int(w * s)
         e = int(w * e)
 
         bar[0, :, int(h * i):int(h * (i + 1)), s:e] = PALETTE[int(i)][:, None, None]
+        if is_neg:
+            bar[0, :, int(h * i):int(h * (i + 1)), s:e:2] //= 2
 
     return bar
 
@@ -162,10 +164,24 @@ if __name__ == '__main__':
                             collate_fn=collate_fn,
                             num_workers=12 if not args.debug else 0)
 
-    n_epochs = 30
+    n_epochs = 40
 
     model = get_model(name=args.model, dropout=args.dropout).cuda()
 
+
+    def build_framewise(y_pred, y_true):
+        framewise = torch.zeros_like(y_pred['framewise_output'], requires_grad=False)
+        framewise_mask = torch.zeros_like(y_pred['framewise_output'], requires_grad=False)
+
+        for sample_id, sample in enumerate(y_true['framewise_target']):
+            for s, e, i, is_neg in sample:
+                s = int(s * framewise.shape[2])
+                e = int(e * framewise.shape[2])
+                framewise_mask[sample_id, int(i), s:e] = 1.0
+                if not is_neg:
+                    framewise[sample_id, int(i), s:e] = 1.0
+
+        return framewise, framewise_mask
 
     def iou_continuous(y_pred, y_true, axes=(-1, -2)):
         _EPSILON = 1e-6
@@ -178,51 +194,34 @@ if __name__ == '__main__':
         return numerator / denominator
 
     def bce_loss(y_pred, y_true):
-        framewise = torch.zeros_like(y_pred['framewise_output'], requires_grad=False)
-
-        for sample_id, sample in enumerate(y_true['framewise_target']):
-            for s, e, i in sample:
-                s = int(s * framewise.shape[2])
-                e = int(e * framewise.shape[2])
-                framewise[sample_id, int(i), s:e] = 1.0
+        framewise, framewise_mask = build_framewise(y_pred, y_true)
 
         bce = torch.nn.functional.binary_cross_entropy_with_logits(
             y_pred['framewise_output'],
             framewise,
             reduction='none')
 
-        iou = 1 - iou_continuous(torch.sigmoid(y_pred['framewise_output']), framewise, axes=-1)
-        iou = iou[framewise.sum(2) > 0].mean()
+        bce = bce * framewise_mask
+
+        iou = 1 - iou_continuous(torch.sigmoid(y_pred['framewise_output']) * framewise_mask, framewise, axes=-1).mean()
+        # iou = iou[framewise.sum(2) > 0].mean()
 
         # pt = torch.exp(-bce)
         # F_loss = 1.0 * (1 - pt) ** 2 * bce
         # F_loss = F_loss.mean()
 
         lsep = lsep_loss(y_pred['clipwise_output'], y_true['clipwise_target'])
-        loss = lsep + iou + bce.mean()
+        framewise_lsep = lsep_loss(y_pred['framewise_output'], framewise)
+        loss = lsep * 0.1 + framewise_lsep * 0.01 + bce.mean() * 10 # + iou * 10
 
-        return loss, {'bce': bce.mean(), 'lsep': lsep, 'iou': iou}
+        return loss, {'bce': bce.mean(), 'lsep': lsep, 'iou': iou, 'framewise_lsep': framewise_lsep}
 
     def val_loss(y_pred, y_true):
-        framewise = torch.zeros_like(y_pred['framewise_output'], requires_grad=False)
-
-        for sample_id, sample in enumerate(y_true['framewise_target']):
-            for s, e, i in sample:
-                s = int(s * framewise.shape[2])
-                e = int(e * framewise.shape[2])
-                framewise[sample_id, int(i), s:e] = 1.0
-
-        iou = iou_continuous(torch.sigmoid(y_pred['framewise_output']), framewise, axes=-1)
-        iou = iou[framewise.sum(-1) > 0].mean()
-
-        bce = torch.nn.functional.binary_cross_entropy_with_logits(
-            y_pred['framewise_output'],
-            framewise)
         lrap = label_ranking_average_precision_score(y_true['clipwise_target'].detach().cpu().numpy(),
-                                                     torch.sigmoid(y_pred['clipwise_output']).detach().cpu().numpy())
+                                                     y_pred['clipwise_output'].detach().cpu().numpy())
         lsep = lsep_loss(y_pred['clipwise_output'], y_true['clipwise_target'])
 
-        return lrap, {'bce': bce, 'lrap': lrap, 'lsep': lsep, 'iou': iou}
+        return lrap, {'lrap': lrap, 'lsep': lsep}
 
     trainer = Trainer(n_epochs,
                       model,

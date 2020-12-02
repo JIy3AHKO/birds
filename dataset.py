@@ -46,16 +46,17 @@ def get_target(num_classes, samples, start, end):
     framewise_target = []
 
     for i, item in samples.iterrows():
-        if item['negative'] == 0:
-            if is_intersect(start, end, item['t_min'], item['t_max']):
+        if is_intersect(start, end, item['t_min'], item['t_max']):
+            if item['negative'] == 0:
                 clipwise_target[item['species_id']] = 1.0
-                framewise_target.append(
-                    [
-                        np.clip(item['t_min'] - start, 0, end - start),
-                        np.clip(item['t_max'] - start, 0, end - start),
-                        item['species_id']
-                     ]
-                )
+            framewise_target.append(
+                [
+                    np.clip(item['t_min'] - start, 0, end - start),
+                    np.clip(item['t_max'] - start, 0, end - start),
+                    item['species_id'],
+                    item['negative']
+                 ]
+            )
 
     return clipwise_target, framewise_target
 
@@ -147,7 +148,13 @@ class NegDataset(Dataset):
         negative_segments = [s for s in segment_set.segments if s[1] - s[0] > self.duration]
         probs = np.array([s[1] - s[0] for s in negative_segments])
         probs /= probs.sum()
+        if len(negative_segments) == 0:
+            return {
+                'a': np.zeros(int(self.duration * self.sample_rate), dtype=np.float32),
+                'clipwise_target': np.zeros(self.num_classes, dtype=np.float32),
+                'framewise_target': [],
 
+            }
         interval = np.random.choice(np.arange(len(negative_segments)), p=probs)
 
         start, end = negative_segments[interval]
@@ -231,11 +238,12 @@ class TrainBirdDataset(Dataset):
 
             pos_clipwise, pos_framewise = pos['clipwise_target'], pos['framewise_target']
             adjusted_framewise = []
-            for int_start, int_end, species_id in pos_framewise:
+            for int_start, int_end, species_id, is_neg in pos_framewise:
                 adjusted_framewise.append([
                     int_start + position,
                     int_end + position,
-                    species_id
+                    species_id,
+                    is_neg
                 ])
 
             clipwise_target += pos_clipwise
@@ -247,11 +255,12 @@ class TrainBirdDataset(Dataset):
         clipwise_target = np.clip(clipwise_target, 0, 1)
 
         normalized_framewise = []
-        for int_start, int_end, species_id in framewise_target:
+        for int_start, int_end, species_id, is_neg in framewise_target:
             normalized_framewise.append([
                 int_start / self.duration,
                 int_end / self.duration,
-                species_id
+                species_id,
+                is_neg
             ])
 
         return {
@@ -333,11 +342,12 @@ class BirdDataset(Dataset):
         data = preprocess_audio(audio_sample)
 
         normalized_framewise = []
-        for int_start, int_end, species_id in framewise_target:
+        for int_start, int_end, species_id, is_neg in framewise_target:
             normalized_framewise.append([
                 int_start / self.duration,
                 int_end / self.duration,
-                species_id
+                species_id,
+                is_neg
             ])
 
         item = {

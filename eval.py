@@ -14,6 +14,32 @@ from misc import LWLRAP, lwlrap
 from predict import InferenceDataset
 from dataset import get_datasets
 
+
+def extract_clipwise_max(res):
+    res = torch.sigmoid(res['clipwise_output'])
+    res = res.detach().cpu().numpy()
+    res = res.max(0)
+
+    return res
+
+
+def extract_framewise_max(res):
+    res = torch.sigmoid(res['framewise_output'])
+    res = res.detach().cpu().numpy()
+    res = res.max(-1).max(0)
+
+    return res
+
+
+def extract_framewise_mean(res):
+    res = torch.sigmoid(res['framewise_output'])
+    res = res.detach().cpu().numpy()
+    res = res.mean(-1).max(0)
+
+    return res
+
+
+
 def get_scores(args):
     model = torch.load(args.model)
     model.cuda()
@@ -33,10 +59,7 @@ def get_scores(args):
             batch = {'x': torch.from_numpy(batch_orig[0]['batch']).cuda()}
 
             res = model(batch)
-            res = torch.sigmoid(res['clipwise_output'])
-            res = res.detach().cpu().numpy()
-            res = res.max(0)
-
+            res = extract_clipwise_max(res)
             preds.append(res)
             gts.append(batch_orig[0]['clipwise_target'])
 
