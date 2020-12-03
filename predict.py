@@ -14,6 +14,47 @@ import tqdm
 from dataset import preprocess_audio, get_target
 import soundfile as sf
 
+
+def extract_clipwise_max(res):
+    res = torch.sigmoid(res['clipwise_output'])
+    res = res.detach().cpu().numpy()
+    res = res.max(0)
+
+    return res
+
+
+def extract_clipwise_perc(res, perc=95):
+    res = torch.sigmoid(res['clipwise_output'])
+    res = res.detach().cpu().numpy()
+    res = np.percentile(res, axis=0, q=perc)
+
+    return res
+
+
+def extract_framewise_max(res):
+    res = torch.sigmoid(res['framewise_output'])
+    res = res.detach().cpu().numpy()
+    res = res.max(-1).max(0)
+
+    return res
+
+
+def extract_framewise_mean(res):
+    res = torch.sigmoid(res['framewise_output'])
+    res = res.detach().cpu().numpy()
+    res = res.mean(-1).max(0)
+
+    return res
+
+
+pred_extractor_map = {
+    'clipwise_max': extract_clipwise_max,
+    'clipwise_perc': extract_clipwise_perc,
+    'framewise_max': extract_framewise_max,
+    'framewise_mean': extract_framewise_mean,
+}
+
+
 sample_rate = 48000
 
 
@@ -34,7 +75,7 @@ class Ensamble(torch.nn.Module):
 
 
 class InferenceDataset(Dataset):
-    def __init__(self, sub, dir, duration):
+    def __init__(self, sub, dir, duration, step=None):
         self.dir = dir
         self.df = sub
         self.ids = self.df['recording_id'].unique()
@@ -44,6 +85,7 @@ class InferenceDataset(Dataset):
 
         self.num_classes = 24
         self.duration = duration
+        self.step = step or duration
 
     def __getitem__(self, idx):
         idxs = self.idxs[self.ids[idx]]
@@ -56,7 +98,9 @@ class InferenceDataset(Dataset):
 
         batch = []
 
-        for start in np.arange(0, 60, self.duration):
+        for start in np.arange(0, 60, self.step):
+            if start + self.duration > 60:
+                break
             start = np.clip(start, 0, 60 - self.duration)
             a = audio[int(start * sample_rate):int((start + self.duration) * sample_rate)]
             data = preprocess_audio(a)
@@ -80,6 +124,8 @@ if __name__ == '__main__':
     parser.add_argument('--dir', '-d', type=str, default='/datasets/data/birds/test/')
     parser.add_argument('--duration', type=float, default=15.0)
     parser.add_argument('--allfolds', action='store_true')
+    parser.add_argument('--step', type=float, default=None)
+    parser.add_argument('--pred_type', type=str, default='clipwise_max')
 
     args = parser.parse_args()
 
@@ -103,7 +149,7 @@ if __name__ == '__main__':
     rows = []
 
     sub = pd.read_csv('/datasets/data/birds/sample_submission.csv')
-    ds = InferenceDataset(sub, args.dir, duration=args.duration)
+    ds = InferenceDataset(sub, args.dir, duration=args.duration, step=args.step)
 
     dl = DataLoader(ds, collate_fn=lambda x: x, shuffle=False, batch_size=1, num_workers=12)
     with torch.no_grad():
@@ -111,9 +157,7 @@ if __name__ == '__main__':
             batch = {'x': torch.from_numpy(batch_orig[0]['batch']).cuda()}
 
             res = model(batch)
-            res = res['clipwise_output']
-            res = res.detach().cpu().numpy()
-            res = res.max(0)
+            res = pred_extractor_map[args.pred_type](res)
 
             row = [batch_orig[0]['recording_id'], *res]
             rows.append(row)

@@ -11,32 +11,9 @@ from torch.utils.data import DataLoader
 import numpy as np
 
 from misc import LWLRAP, lwlrap
-from predict import InferenceDataset
+from predict import InferenceDataset, pred_extractor_map
 from dataset import get_datasets
 
-
-def extract_clipwise_max(res):
-    res = torch.sigmoid(res['clipwise_output'])
-    res = res.detach().cpu().numpy()
-    res = res.max(0)
-
-    return res
-
-
-def extract_framewise_max(res):
-    res = torch.sigmoid(res['framewise_output'])
-    res = res.detach().cpu().numpy()
-    res = res.max(-1).max(0)
-
-    return res
-
-
-def extract_framewise_mean(res):
-    res = torch.sigmoid(res['framewise_output'])
-    res = res.detach().cpu().numpy()
-    res = res.mean(-1).max(0)
-
-    return res
 
 
 
@@ -48,7 +25,7 @@ def get_scores(args):
     _, val_ds = get_datasets(fold=args.fold, pos_rate=args.pos_rate, duration=args.duration)
 
     ds = InferenceDataset(val_ds.df[val_ds.df['negative'] == 0], '/datasets/data/birds/train/',
-                          duration=args.duration)
+                          duration=args.duration, step=args.step)
     dl = DataLoader(ds, collate_fn=lambda x: x, shuffle=False, batch_size=1, num_workers=12)
 
     gts = []
@@ -59,7 +36,7 @@ def get_scores(args):
             batch = {'x': torch.from_numpy(batch_orig[0]['batch']).cuda()}
 
             res = model(batch)
-            res = extract_clipwise_max(res)
+            res = pred_extractor_map[args.pred_type](res)
             preds.append(res)
             gts.append(batch_orig[0]['clipwise_target'])
 
@@ -81,6 +58,8 @@ if __name__ == '__main__':
     parser.add_argument('--bs', type=int, default=16)
     parser.add_argument('--pos_rate', type=float, default=0.75)
     parser.add_argument('--duration', type=float, default=15.0)
+    parser.add_argument('--step', type=float, default=None)
+    parser.add_argument('--pred_type', type=str, default='clipwise_max')
 
     args = parser.parse_args()
 

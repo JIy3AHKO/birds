@@ -79,7 +79,9 @@ class Resnet(nn.Module):
                  num_classes=24,
                  model_type='resnet50',
                  pool='avg',
-                 dropout=0.4):
+                 dropout=0.4,
+                 freq_drop=0.15,
+                 time_drop=0.3):
         super().__init__()
         self.adapt_pool = pools[pool]
         d, self.filters = models[model_type]
@@ -117,13 +119,18 @@ class Resnet(nn.Module):
             ta.transforms.AmplitudeToDB(top_db=80),
         )
 
+        self.freq_drop = freq_drop
+        self.time_drop = time_drop
+
     def forward(self, input):
         waveform = input['x']
 
         spec = self.transforms(waveform)
         #
-        # if self.training:
-        #     spec = spec_augment(spec)
+        if self.training:
+            spec = spec_augment(spec,
+                                freq_masking_max_percentage=self.freq_drop,
+                                time_masking_max_percentage=self.time_drop)
 
         frames_num = spec.shape[3]
         grid = get_coordinate_grid(spec.shape, spec.device)
@@ -193,13 +200,13 @@ class Effnet(nn.Module):
         return {'y': res}
 
 
-def get_model(name, dropout):
+def get_model(name, **kwargs):
     if 'resnet' in name:
-        return Resnet(model_type=name, dropout=dropout)
+        return Resnet(model_type=name,  **kwargs)
     elif 'densenet' in name:
-        return Densenet(dropout=dropout)
+        return Densenet( **kwargs)
     elif 'efficientnet' in name:
-        return Effnet(model_type=name, dropout=dropout)
+        return Effnet(model_type=name, **kwargs)
     elif 'cnn14' in name:
         return Cnn14()
     else:
