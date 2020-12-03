@@ -184,23 +184,33 @@ class NegDataset(Dataset):
 
 
 class TrainBirdDataset(Dataset):
-    def __init__(self, pos_dataset, neg_dataset, duration=6.0, size=5000, sr=48000, augs=None):
+    def __init__(self,
+                 pos_dataset,
+                 neg_dataset,
+                 duration=6.0,
+                 size=5000,
+                 sr=48000,
+                 augs=None,
+                 add_pos_prob=0.5,
+                 add_pos_count=3,
+                 no_bg_noise_prob=0.5):
         self.pos_ds = pos_dataset
         self.neg_ds = neg_dataset
         self.duration = duration
         self.size = size
-        self.additional_pos_prob = 0.5
-        self.additional_pos_count = 3
+        self.additional_pos_prob = add_pos_prob
+        self.additional_pos_count = add_pos_count
         self.sr = sr
         self.min_sample_len = 2 * self.sr
         self.sample_crop_limit = 0.5
         self.num_classes = 24
         self.transforms = augs
+        self.no_bg_noise_prob = no_bg_noise_prob
 
     def __getitem__(self, idx):
         neg_id = np.random.randint(0, len(self.pos_ds))
 
-        if np.random.rand() < 0.5:
+        if np.random.rand() < self.no_bg_noise_prob:
             noise = self.neg_ds[neg_id]
 
             audio_sample = noise['a']
