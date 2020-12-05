@@ -52,9 +52,21 @@ class VisdomImageOp:
         self.imgs.append(value)
 
     def draw(self, vis: visdom.Visdom):
-        for img, text in self.imgs:
+        for res in self.imgs:
+            if len(res) == 2:
+                img, text = res
+                audio = None
+            elif len(res) == 3:
+                img, text, audio = res
+            else:
+                raise ValueError(f"Visdom fn should return 2 or 3 items.")
             vis.images(img, nrow=img.shape[0], padding=self.padding, win=self.name)
             vis.text(text, win=self.name + 'text')
+            if audio is not None:
+                for i, a in enumerate(audio):
+                    vis.audio(a[0], win=self.name + f'audio_{i}', opts={
+                        'sample_frequency': 48000,
+                        'title': f'{self.name}_audio_{i}'})
 
 
 class VisdomVideoOp:

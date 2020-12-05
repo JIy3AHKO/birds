@@ -125,7 +125,7 @@ class Resnet(nn.Module):
     def forward(self, input):
         waveform = input['x']
 
-        spec = self.transforms(waveform)
+        spec = self.transforms(waveform) / 30
         #
         if self.training:
             spec = spec_augment(spec,

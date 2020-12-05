@@ -6,8 +6,12 @@ def insert(target, fragment, pos, sr=48000, alpha=0.75, fade=0.1):
     fade_len = int(fade * sr)
     pos = int(pos * sr)
 
-    fade_fn = np.arange(0, alpha, alpha / fade_len)
-    fade_len = fade_fn.shape[0]
+    if fade_len > 0:
+        fade_fn = np.arange(0, alpha, alpha / fade_len)
+        fade_len = fade_fn.shape[0]
+    else:
+        fade_len = 0
+        fade_fn = 1.0
 
     target[pos:pos+fade_len] *= 1 - fade_fn
     fragment[:fade_len] *= fade_fn

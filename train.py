@@ -86,8 +86,11 @@ def vis_fn(batch, pred):
     bars_gt = np.concatenate(bars)
     bars_pred = draw_bars_pred(10, pred['framewise_output'][:4])
 
-    imgs /= np.max(imgs, axis=0, keepdims=True)
-    imgs *= 255
+    imgs -= np.min(imgs, axis=(1, 2, 3), keepdims=True)
+    imgs /= np.max(imgs, axis=(1, 2, 3), keepdims=True)
+    maxcol = np.array([255, 255, 255])[None, :, None, None]
+    mincol = np.array([0, 0, 0])[None, :, None, None]
+    imgs = imgs * maxcol + (1 - imgs) * mincol
 
     imgs = imgs.astype('uint8')
     imgs = np.concatenate([imgs, bars_gt, bars_pred], axis=-2)
@@ -103,7 +106,7 @@ def vis_fn(batch, pred):
         st = ", ".join([str(a) for a in xs])
         text += f'[{st}] '
 
-    return imgs, text
+    return imgs, text, batch['x'][:4]
 
 
 def parse_aug_args(arguments):
@@ -221,7 +224,10 @@ if __name__ == '__main__':
         framewise_lsep = lsep_loss(y_pred['framewise_output'], framewise)
         loss = lsep * 0.1 + framewise_lsep * 0.01 + bce.mean() * 10 # + iou * 10
 
-        return loss, {'bce': bce.mean(), 'lsep': lsep, 'iou': iou, 'framewise_lsep': framewise_lsep}
+        return loss, {'bce': bce.mean().detach().cpu(),
+                      'lsep': lsep.mean().detach().cpu(),
+                      'iou': iou.mean().detach().cpu(),
+                      'framewise_lsep': framewise_lsep.mean().detach().cpu()}
 
     def val_loss(y_pred, y_true):
         lrap = label_ranking_average_precision_score(y_true['clipwise_target'].detach().cpu().numpy(),

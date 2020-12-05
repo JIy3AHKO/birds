@@ -193,7 +193,9 @@ class TrainBirdDataset(Dataset):
                  augs=None,
                  add_pos_prob=0.5,
                  add_pos_count=3,
-                 no_bg_noise_prob=0.5):
+                 no_bg_noise_prob=0.5,
+                 mix_fade_range=(0.5, 0.15),
+                 mix_alpha_range=(0.6, 1.0)):
         self.pos_ds = pos_dataset
         self.neg_ds = neg_dataset
         self.duration = duration
@@ -206,11 +208,13 @@ class TrainBirdDataset(Dataset):
         self.num_classes = 24
         self.transforms = augs
         self.no_bg_noise_prob = no_bg_noise_prob
+        self.mix_fade_range = mix_fade_range
+        self.mix_alpha_range = mix_alpha_range
 
     def __getitem__(self, idx):
         neg_id = np.random.randint(0, len(self.pos_ds))
 
-        if np.random.rand() < self.no_bg_noise_prob:
+        if np.random.rand() < 1 - self.no_bg_noise_prob:
             noise = self.neg_ds[neg_id]
 
             audio_sample = noise['a']
@@ -239,8 +243,8 @@ class TrainBirdDataset(Dataset):
                 pos['a'] = pos['a'][:int(self.duration * self.sr)]
 
             position = np.random.uniform(0, (len(audio_sample) - len(pos['a'])) / self.sr)
-            alpha = np.random.uniform(0.6, 1.0)
-            fade_size = np.random.uniform(0.5, 0.15) * len(pos['a']) / self.sr
+            alpha = np.random.uniform(*self.mix_alpha_range)
+            fade_size = np.random.uniform(*self.mix_fade_range) * len(pos['a']) / self.sr
 
             positive_sample = am.Normalize(p=1.0)(samples=pos['a'], sample_rate=self.sr)
 
