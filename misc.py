@@ -115,43 +115,6 @@ def saliency(sample, model):
     return saliency[0]
 
 
-
-def lsep_loss_stable(input, target, average=True):
-
-    n = input.size(0)
-
-    differences = input.unsqueeze(1) - input.unsqueeze(2)
-    where_lower = (target.unsqueeze(1) < target.unsqueeze(2)).float()
-
-    differences = differences.view(n, -1)
-    where_lower = where_lower.view(n, -1)
-
-    max_difference, index = torch.max(differences, dim=1, keepdim=True)
-    differences = differences - max_difference
-    exps = differences.exp() * where_lower
-
-    lsep = max_difference + torch.log(torch.exp(-max_difference) + exps.sum(-1))
-
-    if average:
-        return lsep.mean()
-    else:
-        return lsep
-
-
-def lsep_loss(input, target, average=True):
-
-    differences = input.unsqueeze(1) - input.unsqueeze(2)
-    where_different = (target.unsqueeze(1) < target.unsqueeze(2)).float()
-
-    exps = differences.exp() * where_different
-    lsep = torch.log(1 + exps.sum(2).sum(1))
-
-    if average:
-        return lsep.mean()
-    else:
-        return lsep
-
-
 def spec_augment(spec: torch.Tensor, num_mask=2,
                  freq_masking_max_percentage=0.15, time_masking_max_percentage=0.3):
     for i in range(num_mask):
