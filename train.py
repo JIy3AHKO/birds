@@ -114,6 +114,11 @@ def parse_aug_args(arguments):
         'gaussian_snr': {
             'max_SNR': arguments.gaussian_snr_max,
             'p': arguments.gaussian_snr_p
+        },
+        'gain': {
+            'min_gain_in_db': -arguments.random_gain_r,
+            'max_gain_in_db': arguments.random_gain_r,
+            'p': arguments.random_gain_p
         }
     }
 
@@ -136,6 +141,8 @@ if __name__ == '__main__':
     parser.add_argument('--gaussian_snr_p', type=float, default=0.4)
     parser.add_argument('--specaug_freq_drop', type=float, default=0.0)
     parser.add_argument('--specaug_time_drop', type=float, default=0.0)
+    parser.add_argument('--random_gain_r', type=float, default=0.0)
+    parser.add_argument('--random_gain_p', type=float, default=0.0)
 
     args = parser.parse_args()
     experiment_name = ""
@@ -250,4 +257,3 @@ if __name__ == '__main__':
     #sch = TrapezoidScheduler(opt, 50).scheduler
 
     trainer.fit(train_loader, val_loader, opt, sch)
-    torch.save(trainer.model, f'models/last_{args.name}.pth')

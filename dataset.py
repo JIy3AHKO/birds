@@ -264,6 +264,7 @@ class TrainBirdDataset(Dataset):
             framewise_target.extend(adjusted_framewise)
 
         audio_sample = self.transforms(samples=audio_sample, sample_rate=self.sr)
+        audio_sample = am.Gain(p=1.0, max_gain_in_db=-15, min_gain_in_db=-15)(samples=audio_sample, sample_rate=self.sr)
 
         data = preprocess_audio(audio_sample)
         clipwise_target = np.clip(clipwise_target, 0, 1)
@@ -417,7 +418,8 @@ def build_augs(aug_params):
     aug_params = aug_params or {}
 
     available_augs = {
-        'gauss_snr': am.AddGaussianSNR
+        'gauss_snr': am.AddGaussianSNR,
+        'gain': am.Gain
     }
 
     for aug_key, aug_f in available_augs.items():
