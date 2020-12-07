@@ -9,11 +9,8 @@ os.environ['MKL_NUM_THREADS'] = "1"
 os.environ['OPENBLAS_NUM_THREADS'] = "1"
 
 
-from misc import lsep_loss_stable as lsep_loss
-
 import argparse
 from torch.utils.data import DataLoader
-import torch.nn.functional as f
 import torch
 import numpy as np
 import cv2
@@ -22,7 +19,6 @@ from opt import AdaBelief, TrapezoidScheduler
 from dataset import get_datasets
 from trainer import Trainer
 from model import Resnet, Effnet, get_model
-from sklearn.metrics import label_ranking_average_precision_score
 
 
 def generate_bgr_palette(count: int, scale: float = 1 / 255, as_hex=False) -> list:
@@ -150,7 +146,8 @@ if __name__ == '__main__':
     experiment_name = ""
 
     for k, v in vars(args).items():
-        experiment_name += f"{k}-{v}_" if k != "name" else f"{v}_"
+        k_short = ''.join([x[0] for x in k.split('_')])
+        experiment_name += f"{k_short}-{v}_" if k != "name" else f"{v}_"
 
     if args.debug and os.path.exists(f'experiments/{experiment_name}/'):
         os.removedirs(f'experiments/{experiment_name}/')

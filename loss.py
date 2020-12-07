@@ -1,5 +1,6 @@
 import torch
 from sklearn.metrics import label_ranking_average_precision_score
+import torch.nn.functional as f
 
 
 def lsep_loss_stable(input, target, average=True):

@@ -67,8 +67,8 @@ if __name__ == '__main__':
         scores = []
         for fold in range(5):
             args.fold = fold
-            foldname_ = re.findall('_fold-\d+_', args.model)[0]
-            args.model = args.model.replace(foldname_, f'_fold-{fold}_')
+            foldname_ = re.findall('_f-\d+_w', args.model)[0]
+            args.model = args.model.replace(foldname_, f'_f-{fold}_w')
             score, score_class = get_scores(args)
             scores.append(score)
             print(score, score_class)
