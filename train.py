@@ -141,8 +141,8 @@ if __name__ == '__main__':
     parser.add_argument('--gaussian_snr_p', type=float, default=0.4)
     parser.add_argument('--specaug_freq_drop', type=float, default=0.0)
     parser.add_argument('--specaug_time_drop', type=float, default=0.0)
-    parser.add_argument('--random_gain_r', type=float, default=0.0)
-    parser.add_argument('--random_gain_p', type=float, default=0.0)
+    parser.add_argument('--random_gain_r', type=float, default=10.0)
+    parser.add_argument('--random_gain_p', type=float, default=1.0)
 
     args = parser.parse_args()
     experiment_name = ""

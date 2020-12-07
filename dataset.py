@@ -62,7 +62,7 @@ def get_target(num_classes, samples, start, end):
 
 
 class PosDataset(Dataset):
-    def __init__(self, df, ds_dir='/datasets/data/birds/train/'):
+    def __init__(self, df, ds_dir='/datasets/data/birds/train/', overlap=(0.5, 0.5)):
         self.df = df
         self.path = ds_dir
         self.num_classes = 24
@@ -72,7 +72,7 @@ class PosDataset(Dataset):
         for i, (_, item) in enumerate(self.df.iterrows()):
             self.idxs[item['recording_id']].append(i)
 
-        self.overlap = 0.5
+        self.overlap = overlap
 
     def __getitem__(self, idx):
         idxs = self.idxs[self.ids[idx]]
@@ -91,9 +91,9 @@ class PosDataset(Dataset):
         interval = np.random.choice(np.arange(len(idxs)))
 
         sample = self.df.iloc[idxs[interval]]
-
-        start = np.clip(sample['t_min'] - self.overlap, 0, 60)
-        end = np.clip(sample['t_max'] + self.overlap, 0, 60)
+        overlap = np.random.uniform(*self.overlap)
+        start = np.clip(sample['t_min'] - overlap, 0, 60)
+        end = np.clip(sample['t_max'] + overlap, 0, 60)
 
         clipwise_target, framewise_target = get_target(self.num_classes, samples, start, end)
 
