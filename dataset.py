@@ -195,7 +195,8 @@ class TrainBirdDataset(Dataset):
                  add_pos_count=3,
                  no_bg_noise_prob=0.5,
                  mix_fade_range=(0.5, 0.15),
-                 mix_alpha_range=(0.6, 1.0)):
+                 mix_alpha_range=(0.6, 1.0),
+                 shift_gain=-12):
         self.pos_ds = pos_dataset
         self.neg_ds = neg_dataset
         self.duration = duration
@@ -210,6 +211,7 @@ class TrainBirdDataset(Dataset):
         self.no_bg_noise_prob = no_bg_noise_prob
         self.mix_fade_range = mix_fade_range
         self.mix_alpha_range = mix_alpha_range
+        self.shift_gain = shift_gain
 
     def __getitem__(self, idx):
         neg_id = np.random.randint(0, len(self.pos_ds))
@@ -264,7 +266,8 @@ class TrainBirdDataset(Dataset):
             framewise_target.extend(adjusted_framewise)
 
         audio_sample = self.transforms(samples=audio_sample, sample_rate=self.sr)
-        audio_sample = am.Gain(p=1.0, max_gain_in_db=-15, min_gain_in_db=-15)(samples=audio_sample, sample_rate=self.sr)
+        audio_sample = am.Gain(p=1.0, max_gain_in_db=self.shift_gain, min_gain_in_db=self.shift_gain)\
+            (samples=audio_sample, sample_rate=self.sr)
 
         data = preprocess_audio(audio_sample)
         clipwise_target = np.clip(clipwise_target, 0, 1)
@@ -377,7 +380,7 @@ class BirdDataset(Dataset):
         return len(self.ids)
 
 
-def get_datasets(seed=1337228, fold=0, n_folds=5, pos_rate=0.75, duration=6.0, dssize=5000, aug_params=None):
+def get_datasets(seed=1337228, fold=0, n_folds=5, pos_rate=0.75, duration=6.0, dssize=5000, aug_params=None, shift_gain=-15):
     csv_pos = pd.read_csv('/datasets/data/birds/train_tp_prep.csv')
     csv_neg = pd.read_csv('/datasets/data/birds/train_fp_prep.csv')
 
@@ -406,7 +409,7 @@ def get_datasets(seed=1337228, fold=0, n_folds=5, pos_rate=0.75, duration=6.0, d
 
     train_datasets = ConcatDataset([
         BirdDataset(train_df, pos_rate=pos_rate, disable_negative=False, duration=duration, augs=augs),
-        TrainBirdDataset(pos_ds, neg_ds, duration=duration, size=dssize, augs=augs)
+        TrainBirdDataset(pos_ds, neg_ds, duration=duration, size=dssize, augs=augs, shift_gain=shift_gain)
     ])
 
     return train_datasets, BirdDataset(test_df, pos_rate=1.0, is_val=True, duration=duration)
