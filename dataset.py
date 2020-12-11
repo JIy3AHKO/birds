@@ -302,7 +302,7 @@ class BirdDataset(Dataset):
         self.sample_rate = 48000
         self.duration = duration
         self.pos_rate = pos_rate
-        self.epsilon = 0.1
+        self.epsilon = 1.0
         self.ids = self.df['recording_id'].unique()
         self.idxs = {i: [] for i in self.ids}
         self.is_val = is_val
@@ -381,7 +381,14 @@ class BirdDataset(Dataset):
         return len(self.ids)
 
 
-def get_datasets(seed=1337228, fold=0, n_folds=5, pos_rate=0.75, duration=6.0, dssize=5000, aug_params=None, shift_gain=-15):
+def get_datasets(seed=1337228,
+                 fold=0,
+                 n_folds=5,
+                 pos_rate=0.75,
+                 duration=6.0,
+                 dssize=5000,
+                 aug_params=None,
+                 shift_gain=-15):
     csv_pos = pd.read_csv('/datasets/data/birds/train_tp_prep.csv')
     csv_neg = pd.read_csv('/datasets/data/birds/train_fp_prep.csv')
 

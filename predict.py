@@ -67,7 +67,7 @@ class Ensamble(torch.nn.Module):
     def forward(self, x):
         res = [m(x) for m in self.models]
         if self.avg_mode == 'geomean':
-            return {'clipwise_output': torch.prod(torch.cat([torch.sigmoid(r['clipwise_output'][None]) + 1e-8 for r in res], dim=0), dim=0) ** (1 / len(self.models))}
+            return {'clipwise_output': torch.prod(torch.cat([torch.sigmoid(r['clipwise_output'][None]) + 1e-10 for r in res], dim=0), dim=0) ** (1 / len(self.models))}
         elif self.avg_mode == 'mean':
             return {'clipwise_output': torch.sigmoid(torch.mean(torch.cat([r['clipwise_output'][None] for r in res], dim=0), dim=0))}
         else:

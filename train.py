@@ -128,7 +128,7 @@ if __name__ == '__main__':
     parser.add_argument('--fold', '-f', type=int, default=0)
     parser.add_argument('--wd', type=float, default=1e-2)
     parser.add_argument('--model', type=str, default="resnet34")
-    parser.add_argument('--dropout', type=float, default=0.45)
+    parser.add_argument('--dropout', type=float, default=0.5)
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--bs', type=int, default=64)

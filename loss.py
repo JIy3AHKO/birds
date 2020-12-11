@@ -83,12 +83,14 @@ def train_loss(y_pred, y_true):
 
     lsep = lsep_loss_stable(y_pred['clipwise_output'], y_true['clipwise_target'])
     framewise_lsep = lsep_loss_stable(y_pred['framewise_output'], framewise)
-    loss = lsep * 0.1 + framewise_lsep * 0.01 + bce.mean() * 10 # + iou * 10
+
+    loss = lsep + framewise_lsep * 0.1 + bce.mean() * 10 # + iou * 10
 
     return loss, {'bce': bce.mean().detach().cpu(),
                   'lsep': lsep.mean().detach().cpu(),
                   'iou': iou.mean().detach().cpu(),
-                  'framewise_lsep': framewise_lsep.mean().detach().cpu()}
+                  'framewise_lsep': framewise_lsep.mean().detach().cpu(),
+                  }
 
 def val_loss(y_pred, y_true):
     lrap = label_ranking_average_precision_score(y_true['clipwise_target'].detach().cpu().numpy(),
