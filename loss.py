@@ -94,4 +94,7 @@ def val_loss(y_pred, y_true):
     lrap = label_ranking_average_precision_score(y_true['clipwise_target'].detach().cpu().numpy(),
                                                  y_pred['clipwise_output'].detach().cpu().numpy())
 
-    return lrap, {'lrap': lrap}
+    #torch.sigmoid(y_true
+
+
+    return lrap, {'lrap': lrap, }

@@ -235,11 +235,12 @@ class TrainBirdDataset(Dataset):
 
             # pos['a'] = am.TimeStretch(leave_length_unchanged=False, p=0.15)(samples=pos['a'], sample_rate=self.sr)
 
-            # pos['a'] = audio.audio_filter(pos['a'],
-            #                               mode='bandpass',
-            #                               w=[pos['f_min'],
-            #                                  pos['f_max']],
-            #                               wet=np.random.uniform(0.75, 1.0))
+            if np.random.rand() < 0.5:
+                pos['a'] = audio.audio_filter(pos['a'],
+                                              mode='bandpass',
+                                              w=[pos['f_min'],
+                                                 pos['f_max']],
+                                              wet=np.random.uniform(0.75, 1.0))
 
             if len(pos['a']) > int(self.duration * self.sr):
                 pos['a'] = pos['a'][:int(self.duration * self.sr)]

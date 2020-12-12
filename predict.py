@@ -140,7 +140,7 @@ if __name__ == '__main__':
             model.cuda()
             model.eval()
             models.append(model)
-        model = Ensamble(models)
+        model = Ensamble(models, avg_mode='geomean')
     else:
         model = torch.load(args.model)
         model.cuda()
